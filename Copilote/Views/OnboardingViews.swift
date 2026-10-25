@@ -68,6 +68,7 @@ struct OnboardingStepView: View {
             step(Copy.Welcome.welcomeTitle, Copy.Welcome.welcomeBody)
         case .permissions:
             step(Copy.Welcome.permissionsTitle, Copy.Welcome.permissionsBody) {
+                Text("These buttons open macOS permission dialogs or System Settings. Those windows and system indicators may be visible in a screen share.").font(.caption).foregroundStyle(.secondary)
                 row(Copy.Welcome.microphone, Copy.Welcome.microphoneWhy, isDone: status.permissions.microphone) {
                     Button(Copy.Welcome.allow, action: onOpenMicrophoneSettings)
                 }
@@ -97,8 +98,8 @@ struct OnboardingStepView: View {
                 }
             }
         case .stealth:
-            step(Copy.Welcome.stealthTitle, Copy.Welcome.stealthBody(status.labels.toggleMode)) {
-                row(status.isStealth ? Copy.Welcome.stealthOn : Copy.Welcome.stealthOff, Copy.Welcome.stealthWhere, isDone: status.isStealth) {
+            step(Copy.Welcome.stealthTitle, Copy.Welcome.stealthBody) {
+                row(Copy.Welcome.stealthOn, Copy.Welcome.stealthWhere, isDone: true) {
                     EmptyView()
                 }
             }

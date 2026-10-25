@@ -67,7 +67,6 @@ public enum ShortcutDefaults {
         // ⌥⌘O, O for overlay: free in macOS and the usual launchers (Spotlight ⌘Space, ChatGPT,
         // Raycast and Alfred ⌥Space, 1Password ⇧⌘Space).
         Default(name: "toggleOverlay", key: .character("o"), modifiers: [.command, .option]),
-        Default(name: "toggleMode", key: .character("h"), modifiers: [.command, .shift]),
         Default(name: "captureScreen", key: .character("s"), modifiers: [.command, .shift]),
         Default(name: "captureRegion", key: .character("a"), modifiers: [.command, .shift]),
         Default(name: "sendCaptures", key: .physical(36), modifiers: [.command, .shift]),

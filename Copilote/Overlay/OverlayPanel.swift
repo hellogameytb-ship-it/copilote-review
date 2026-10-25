@@ -3,7 +3,7 @@ import AppKit
 /// The floating panels (the pill and the panel under it). Non-activating: Copilote never comes
 /// forward. The panel takes the keyboard only while the user types in "Demander"
 /// (`allowsKey`, the user's step 4 brief), then gives it back to the call app.
-class OverlayPanel: NSPanel {
+class OverlayPanel: ProtectedPanel {
     /// Narrow and short enough to leave the middle of the screen (the call) visible.
     static let defaultSize = NSSize(width: 600, height: 640)
     /// True only while typing.
@@ -22,9 +22,11 @@ class OverlayPanel: NSPanel {
         // takes the user to another Space.
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         // Locked decision: hiding from screen sharing is this flag (+ .accessory mode), nothing more.
-        sharingType = .none
+        sharingType = WindowPrivacy.sharing
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
+        isRestorable = false
+        canBecomeVisibleWithoutLogin = false
         isMovableByWindowBackground = false
         animationBehavior = .none
         isExcludedFromWindowsMenu = true
@@ -56,9 +58,46 @@ class OverlayPanel: NSPanel {
         root.onWorkspaceDragEnded?()
     }
 
+    override func sendEvent(_ event: NSEvent) {
+        // Context menus and Control-click menus are system windows outside panel protection.
+        if event.type == .rightMouseDown || event.type == .rightMouseUp ||
+            (event.type == .leftMouseDown && event.modifierFlags.contains(.control)) { return }
+        super.sendEvent(event)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if (firstResponder as? NSView)?.identifier?.rawValue == "CopiloteShortcutRecorder" { return false }
+        let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        guard flags == .command || flags == [.command, .shift], let key = event.charactersIgnoringModifiers?.lowercased() else { return super.performKeyEquivalent(with: event) }
+        let command: String?
+        switch key {
+        case "a": command = "selectAll:"
+        case "c": command = "copy:"
+        case "v": command = "paste:"
+        case "x": command = "cut:"
+        case "z": command = flags.contains(.shift) ? "redo:" : "undo:"
+        case "q": NSApp.terminate(nil); return true
+        default: command = nil
+        }
+        if let command { return NSApp.sendAction(Selector(command), to: nil, from: self) }
+        return super.performKeyEquivalent(with: event)
+    }
+
     override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
         let accepted = super.makeFirstResponder(responder)
-        if accepted { NotificationCenter.default.post(name: .copiloteFirstResponderChanged, object: self) }
+        if accepted {
+            if let text = responder as? NSTextView {
+                text.isContinuousSpellCheckingEnabled = false
+                text.isGrammarCheckingEnabled = false
+                text.isAutomaticSpellingCorrectionEnabled = false
+                text.isAutomaticTextCompletionEnabled = false
+                text.isAutomaticTextReplacementEnabled = false
+                text.displaysLinkToolTips = false
+                text.inlinePredictionType = .no
+                if #available(macOS 15.0, *) { text.writingToolsBehavior = .none }
+            }
+            NotificationCenter.default.post(name: .copiloteFirstResponderChanged, object: self)
+        }
         return accepted
     }
 
@@ -108,10 +147,11 @@ private final class QuietFieldEditor: NSTextView {
 /// The pill: dragged by its grip only (a click on a control never moves it), never key.
 final class PillPanel: OverlayPanel {
     /// Just wider than the panel under it (440): one block, like Cluely's bar and card.
-    static let size = NSSize(width: 480, height: 40)
+    static let size = NSSize(width: 600, height: 40)
 
     init() {
         super.init(size: Self.size, resizable: false)
+        appearance = NSAppearance(named: .darkAqua)
         isMovableByWindowBackground = false
         hasShadow = true
     }

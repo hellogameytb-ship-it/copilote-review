@@ -10,7 +10,6 @@ struct ShortcutLabels: Equatable {
     var toggleListening = "⇧⌘L"
     var answerLatestTopic = "⌘↩"
     var meetingNotes = "⇧⌘N"
-    var toggleMode = "⇧⌘H"
     var ask = "⌃⌘↩"
 }
 
@@ -30,8 +29,6 @@ enum Copy {
         static let askHelp = "Type a question using the session context"
         static let stealth = "Stealth"
         static let stealthOn = "Stealth on"
-        static let stealthOff = "Stealth off"
-        static func stealthHint(_ keys: String, hide: String) -> String { "Hide from Dock and app switcher; the overlay stays visible to you (\(keys)). Hide the overlay: \(hide)." }
         static let unfold = "Expand"
         static let fold = "Collapse"
         static let mode = "Mode"
@@ -135,7 +132,7 @@ enum Copy {
         static let autoAnswerHelp = "Hands-free during an explicitly started session. Only interviewer requests trigger answers; your voice adds context. Each updated subject uses your provider quota."
         static let menuBar = "Show menu bar icon"
         static let stealth = "Stealth mode"
-        static let stealthHelp = "Hide from Dock and app switcher. The overlay remains visible to you. This settings window closes because it is not excluded from screen sharing."
+        static let stealthHelp = "Stealth ON hides Copilote from the Dock and app switcher and requests capture exclusion for its panels. OFF allows sharing. Capture tools can ignore exclusion. The shared cursor, macOS indicators and system dialogs may remain visible. Use keyboard shortcuts or automatic answers to reduce mouse movement."
         static let openAtLogin = "Open Copilote at login"
         static let openAtLoginApprove = "Approve in System Settings › General › Login Items"
         static func openAtLoginFailed(_ reason: String) -> String { "Could not change login behavior: \(reason)" }
@@ -163,7 +160,7 @@ enum Copy {
         static let toDo = "Required"
         static let allow = "Allow"
         static let retry = "Retry"
-        static let openFolder = "Open folder"
+        static let openFolder = "Open in Finder"
         static let welcomeTitle = "Welcome to Copilote"
         static let welcomeBody = "Start a session to listen to both sides, keep the conversation in memory and prepare English answers automatically from your CV and Brain. Check screen-sharing behavior in your meeting app."
         static let permissionsTitle = "Two permissions"
@@ -177,7 +174,7 @@ enum Copy {
         static let codexReady = "Codex is ready"
         static let codexMissing = "Codex is not ready"
         static let baseTitle = "Your Brain"
-        static let baseBody = "Copilote reads your Brain Markdown notes in iCloud without modifying them. Search is local; only relevant, sourced excerpts accompany an answer. Recognized sensitive notes are excluded."
+        static let baseBody = "Copilote reads your Brain Markdown notes in iCloud without modifying them. Search is local; only relevant, sourced excerpts accompany an answer. Recognized sensitive notes are excluded. Opening the folder uses Finder, which may be visible in a screen share."
         static func baseCount(_ items: Int) -> String { items == 0 ? "No notes indexed. Make Brain available on this Mac." : "\(items) indexed items." }
         static let shortcutsTitle = "Four shortcuts"
         static let shortcutsBody = "Every action is also available with the mouse. Customize shortcuts in settings."
@@ -186,10 +183,9 @@ enum Copy {
         static let keyScreen = "Answer the screenshot stack"
         static let keyListen = "Start or end a session"
         static let stealthTitle = "Stealth mode"
-        static func stealthBody(_ keys: String) -> String { "Hide Copilote from Dock and app switcher while keeping the overlay visible. Use Stealth or \(keys) to toggle it. Verify sharing behavior in your meeting app." }
-        static let stealthOn = "Stealth enabled"
-        static let stealthOff = "Stealth disabled"
-        static let stealthWhere = "The overlay requests exclusion from screen sharing in both modes. Meeting apps may handle this differently. Stealth also closes the main window."
+        static let stealthBody = "Use Stealth on/off in the pill or settings. On keeps Copilote out of the Dock and app switcher and requests exclusion from sharing. Off makes the app panels shareable. Your choice is saved."
+        static let stealthOn = "Choose Stealth in the pill"
+        static let stealthWhere = "ScreenCaptureKit and other capture tools may ignore this request. No universal invisibility is promised. Test with a receiver before relying on it. macOS dialogs and indicators are not hidden."
     }
     enum MenuBar {
         static let show = "Show Copilote"

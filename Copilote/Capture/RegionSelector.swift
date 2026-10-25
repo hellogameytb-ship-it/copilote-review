@@ -10,6 +10,15 @@ final class RegionSelector {
     private var panel: SelectionPanel?
     private var continuation: CheckedContinuation<CGImage?, Never>?
     private var escapeTask: Task<Void, Never>?
+    private var cursorPushed = false
+    private var visibilityObserver: NSObjectProtocol?
+
+    init() {
+        visibilityObserver = NotificationCenter.default.addObserver(forName: .copilotePresentationSuspended, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.finish(with: nil) }
+        }
+    }
+    deinit { if let visibilityObserver { NotificationCenter.default.removeObserver(visibilityObserver) } }
 
     var isSelecting: Bool { panel != nil }
 
@@ -23,7 +32,9 @@ final class RegionSelector {
             let panel = SelectionPanel(screen: screen, contentView: view)
             self.panel = panel
             panel.orderFrontRegardless()
+            guard panel.isVisible else { self.finish(with: nil); return }
             NSCursor.crosshair.push()
+            cursorPushed = true
             escapeTask = Task { [weak self] in
                 for await event in KeyboardShortcuts.events(for: .init(.escape)) where event == .keyDown {
                     self?.finish(with: nil)
@@ -35,7 +46,7 @@ final class RegionSelector {
     private func finish(with image: CGImage?) {
         escapeTask?.cancel()
         escapeTask = nil
-        if panel != nil { NSCursor.pop() }
+        if cursorPushed { NSCursor.pop(); cursorPushed = false }
         panel?.orderOut(nil)
         panel = nil
         continuation?.resume(returning: image)
@@ -43,16 +54,19 @@ final class RegionSelector {
     }
 }
 
-private final class SelectionPanel: NSPanel {
+private final class SelectionPanel: ProtectedPanel {
     init(screen: NSScreen, contentView: NSView) {
         super.init(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         level = .screenSaver
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        sharingType = .none
+        identifier = NSUserInterfaceItemIdentifier("CopiloteRegion")
+        sharingType = WindowPrivacy.sharing
         isOpaque = true
         hasShadow = false
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
+        isRestorable = false
+        canBecomeVisibleWithoutLogin = false
         animationBehavior = .none
         self.contentView = contentView
         setFrame(screen.frame, display: true)

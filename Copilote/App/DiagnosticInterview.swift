@@ -134,7 +134,7 @@ enum DiagnosticInterview {
         await listening.stop()
         overlay.hide()
         record("hide all includes personal notes", sticky.notes.filter { $0.deletedAt == nil }.allSatisfy { !sticky.isWindowVisible($0.id) })
-        overlay.present()
+        AppDelegate.reopen(overlay: overlay)
         record("reopen restores visible personal notes", sticky.notes.filter { $0.deletedAt == nil }.allSatisfy { sticky.isWindowVisible($0.id) })
         DiagnosticSnapshot.write(to: folder.appendingPathComponent("personal-notes"), spaceChanges: 0)
         sticky.toggleVisible()
@@ -145,19 +145,19 @@ enum DiagnosticInterview {
         var spaceChanges = 0
         let observer = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in spaceChanges += 1 }
         for iteration in 1...3 {
-            settings.stealth = false; NSApp.setActivationPolicy(.regular)
+            NSApp.setActivationPolicy(.accessory)
             mainWindow.show(); mainWindow.close()
             _ = (NSApp.delegate as? AppDelegate)?.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
-            let main = NSApp.windows.first { $0.title == "Copilote" && !($0 is OverlayPanel) }
+            let main = NSApp.windows.first { $0.title == "Copilote Settings" }
             record("close then delegate reopen \(iteration)", overlay.model.isUnfolded && overlay.isVisible)
-            mainWindow.show(); main?.miniaturize(nil); await pause(80)
+            mainWindow.show(); main?.orderOut(nil); await pause(80)
             _ = (NSApp.delegate as? AppDelegate)?.applicationShouldHandleReopen(NSApp, hasVisibleWindows: true)
-            record("minimized settings leave usable workspace on reopen \(iteration)", overlay.model.isUnfolded && overlay.isVisible)
+            record("closed protected settings leave usable workspace on reopen \(iteration)", overlay.model.isUnfolded && overlay.isVisible)
             NSApp.hide(nil); await pause(80)
             _ = (NSApp.delegate as? AppDelegate)?.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
             await pause(120)
             record("hidden app reopens \(iteration)", !NSApp.isHidden && overlay.model.isUnfolded && overlay.isVisible)
-            mainWindow.close(); settings.stealth = true; NSApp.setActivationPolicy(.accessory)
+            mainWindow.close(); NSApp.setActivationPolicy(.accessory)
             overlay.hide()
             _ = (NSApp.delegate as? AppDelegate)?.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
             record("stealth reopen restores expanded panel \(iteration)", overlay.isVisible && overlay.model.isUnfolded)
@@ -168,7 +168,7 @@ enum DiagnosticInterview {
         record("background density leaves foreground opacity intact", NSApp.windows.filter { $0 is OverlayPanel }.allSatisfy { $0.contentView?.alphaValue == 1 })
         if let web = overlay.readingArea as? ResponseWebView {
             let bg = try? await web.evaluateJavaScript("getComputedStyle(document.body).backgroundColor") as? String
-            record("WebKit reading surface has transparent CSS and native underlay", bg == "rgba(0, 0, 0, 0)" && web.underPageBackgroundColor.alphaComponent == 0)
+            record("WebKit reading surface has transparent CSS and native underlay", bg == "rgba(0, 0, 0, 0)" && web.supportsTransparentBackground)
         }
         let accessibleSurface = FrostedSurface()
         accessibleSurface.backgroundMode = .system

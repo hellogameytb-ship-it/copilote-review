@@ -5,7 +5,6 @@ import KeyboardShortcuts
 extension KeyboardShortcuts.Name {
     static let toggleOverlay = Self("toggleOverlay")
     /// The stealth mode (its name kept from the first « mode caché »: renaming would reset it).
-    static let toggleMode = Self("toggleMode")
     static let captureScreen = Self("captureScreen")
     static let captureRegion = Self("captureRegion")
     static let sendCaptures = Self("sendCaptures")
@@ -44,7 +43,7 @@ extension ShortcutLabels {
             toggleOverlay: ShortcutCatalog.keys(for: .toggleOverlay), captureScreen: ShortcutCatalog.keys(for: .captureScreen),
             sendCaptures: ShortcutCatalog.keys(for: .sendCaptures), toggleListening: ShortcutCatalog.keys(for: .toggleListening),
             answerLatestTopic: ShortcutCatalog.keys(for: .answerLatestTopic), meetingNotes: ShortcutCatalog.keys(for: .meetingNotes),
-            toggleMode: ShortcutCatalog.keys(for: .toggleMode), ask: ShortcutCatalog.keys(for: .ask)
+            ask: ShortcutCatalog.keys(for: .ask)
         )
     }
 }
@@ -53,7 +52,6 @@ enum ShortcutCatalog {
     /// Order and English labels shown in settings.
     static let all: [(name: KeyboardShortcuts.Name, label: String)] = [
         (.toggleOverlay, "Show / hide overlay"),
-        (.toggleMode, "Stealth (hide Dock and app switcher)"),
         (.captureScreen, "Capture screen"),
         (.captureRegion, "Add screen region"),
         (.ask, "Ask a typed question"),

@@ -157,7 +157,7 @@
       el.innerHTML = svg;
       stripTooltips(el);
       // No `title`: a tooltip is a system window, visible in a screen share.
-      el.setAttribute('aria-label', 'Agrandir le diagramme');
+      el.setAttribute('aria-label', 'Enlarge diagram');
       el.onclick = () => openZoom(el);
       sizeDiagram(el);
     } else {
@@ -172,7 +172,7 @@
     node.key = key;
     if (!segment.complete) {
       node.el.className = 'diagram pending';
-      node.el.textContent = 'Diagramme en cours…';
+      node.el.textContent = 'Building diagram…';
       return;
     }
     if (diagramCache.has(segment.source)) {
@@ -180,7 +180,7 @@
       return;
     }
     node.el.className = 'diagram pending';
-    node.el.textContent = 'Diagramme…';
+    node.el.textContent = 'Diagram…';
     renderMermaid(segment.source).then((svg) => {
       diagramCache.set(segment.source, svg);
       if (node.key !== key) return;
@@ -212,7 +212,7 @@
     zoom.appendChild(sheet);
     const hint = document.createElement('p');
     hint.className = 'zoom-hint';
-    hint.textContent = 'Clic pour revenir';
+    hint.textContent = 'Click to return';
     zoom.appendChild(hint);
     zoom.onclick = closeZoom;
     document.body.appendChild(zoom);

@@ -4,7 +4,7 @@ import KeyboardShortcuts
 import ServiceManagement
 import SwiftUI
 
-/// Main window (normal mode only): settings on the left, the session's answers on the right.
+/// Protected settings panel: settings on the left, session history on the right.
 struct MainView: View {
     @ObservedObject var settings: SettingsStore
     @ObservedObject var session: SessionController
@@ -12,15 +12,15 @@ struct MainView: View {
     @ObservedObject var providers: ProviderController
     @ObservedObject var base: BaseController
     @ObservedObject var history: HistoryController
-    let onStealth: (Bool) -> Void
     var onMenuBarChange: () -> Void = {}
     var onTour: () -> Void = {}
+    var notes: NotesController?
 
     var body: some View {
         HStack(spacing: 0) {
             SettingsForm(
                 settings: settings, listening: listening, providers: providers, base: base, history: history,
-                onStealth: onStealth, onShortcutChange: session.refreshShortcutHints, onMenuBarChange: onMenuBarChange, onTour: onTour
+                onShortcutChange: session.refreshShortcutHints, onMenuBarChange: onMenuBarChange, onTour: onTour
             )
                 .frame(width: 420)
             Divider()
@@ -29,6 +29,12 @@ struct MainView: View {
                     isRecording: history.isRecording, sessions: history.sessions, query: $history.query, selection: $history.selection,
                     opened: history.opened, onExport: history.export, onDelete: history.delete
                 )
+                if let notice = history.exportNotice {
+                    Text(notice).font(.caption).foregroundStyle(.orange).padding(12)
+                }
+                if let notes {
+                    DisclosureGroup("Session notes") { NotesArea(notes: notes) }.padding(12)
+                }
                 if !history.isRecording, !session.history.isEmpty {
                     Divider()
                     VStack(alignment: .leading, spacing: 0) {
@@ -50,7 +56,6 @@ private struct SettingsForm: View {
     @ObservedObject var providers: ProviderController
     @ObservedObject var base: BaseController
     @ObservedObject var history: HistoryController
-    let onStealth: (Bool) -> Void
     let onShortcutChange: () -> Void
     let onMenuBarChange: () -> Void
     let onTour: () -> Void
@@ -64,12 +69,14 @@ private struct SettingsForm: View {
         Form {
             Section {
                 Text("Copilote").font(.title3.weight(.semibold))
-                Toggle(isOn: Binding(get: { settings.stealth }, set: onStealth)) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(Copy.Settings.stealth)
-                        Text(Copy.Settings.stealthHelp).font(.caption).foregroundStyle(.secondary)
-                    }
+                HStack {
+                    StealthStateLabel(isOn: settings.stealth)
+                    Spacer()
+                    Button(settings.stealth ? "Turn off" : "Turn on") { settings.stealth.toggle() }
+                        .accessibilityLabel(settings.stealth ? "Turn Stealth off" : "Turn Stealth on")
                 }
+                Text(Copy.Settings.stealthHelp).font(.caption).foregroundStyle(.secondary)
+                Text("Every fresh launch stays hidden with listening off. Open Copilote again while it is running, or use \(ShortcutCatalog.keys(for: .toggleOverlay)), to show the expanded workspace. Login and recovery never resume listening. After sleep, show it explicitly and resume listening yourself.").font(.caption).foregroundStyle(.secondary)
                 LoginItemToggle()
             }
 
@@ -84,6 +91,7 @@ private struct SettingsForm: View {
             BaseSection(settings: settings, base: base)
 
             Section("Anthropic API key") {
+                Text("Saving or deleting a key may open a macOS Keychain dialog visible in a screen share. Background key reads never request authentication UI.").font(.caption).foregroundStyle(.secondary)
                 if settings.hasAPIKey {
                     LabeledContent("Status") {
                         Label("Saved in Keychain", systemImage: "checkmark.seal")
@@ -115,25 +123,28 @@ private struct SettingsForm: View {
                     ForEach(SettingsStore.effortChoices, id: \.value) { choice in
                         Text(choice.label).tag(choice.value)
                     }
-                }
+                }.pickerStyle(.radioGroup)
             }
 
             Section("Global shortcuts") {
                 ForEach(ShortcutCatalog.all, id: \.name.rawValue) { shortcut in
-                    KeyboardShortcuts.Recorder(shortcut.label, name: shortcut.name) { _ in onShortcutChange() }
+                    ProtectedShortcutRecorder(label: shortcut.label, name: shortcut.name, onChange: onShortcutChange)
                 }
                 Button(Copy.Settings.resetShortcuts) { confirmsShortcutReset = true }
-                    .confirmationDialog(Copy.Settings.resetShortcutsQuestion, isPresented: $confirmsShortcutReset) {
-                        Button(Copy.Settings.resetShortcutsConfirm, role: .destructive) {
-                            ShortcutSetup.resetToDefaults()
-                            onShortcutChange()
+
+                if confirmsShortcutReset {
+                    Text(Copy.Settings.resetShortcutsHelp).font(.caption)
+                    HStack {
+                        Button("Cancel") { confirmsShortcutReset = false }
+                        Button(Copy.Settings.resetShortcutsConfirm) {
+                            ShortcutSetup.resetToDefaults(); onShortcutChange(); confirmsShortcutReset = false
                         }
-                    } message: {
-                        Text(Copy.Settings.resetShortcutsHelp)
                     }
+                }
             }
 
             Section("Screen Recording") {
+                Text("Permission dialogs and System Settings are not protected Copilote panels and may be visible in a screen share.").font(.caption).foregroundStyle(.secondary)
                 if hasScreenPermission {
                     Label("Allowed", systemImage: "checkmark.circle").foregroundStyle(.secondary)
                 } else {
@@ -174,7 +185,7 @@ private struct ProviderSection: View {
                 Text("Automatic (Codex when signed in)").tag(ProviderChoice.automatic.rawValue)
                 Text("Codex · ChatGPT subscription").tag(ProviderChoice.codex.rawValue)
                 Text("Anthropic · API key").tag(ProviderChoice.anthropic.rawValue)
-            }
+            }.pickerStyle(.radioGroup)
             LabeledContent("Codex") {
                 Text(codexStatus).foregroundStyle(.secondary)
             }
@@ -182,7 +193,7 @@ private struct ProviderSection: View {
                 Text("gpt-5.6-luna (fastest)").tag("gpt-5.6-luna")
                 Text("gpt-5.6-sol").tag("gpt-5.6-sol")
                 Text("gpt-5.6-terra").tag("gpt-5.6-terra")
-            }
+            }.pickerStyle(.radioGroup)
             Toggle("Codex Fast mode (uses more quota)", isOn: $settings.codexFast)
             Text("Codex uses your existing CLI sign-in. No key is copied. Commands, file writes, "
                 + "browsing and MCP tools are disabled. The first response may take longer "
@@ -211,6 +222,7 @@ private struct ListeningSection: View {
 
     var body: some View {
         Section("Session") {
+            Text("Permission buttons open macOS dialogs or System Settings, which may be visible in a screen share.").font(.caption).foregroundStyle(.secondary)
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(status).foregroundStyle(statusIsError ? AnyShapeStyle(FicheStyle.danger) : AnyShapeStyle(.primary))
@@ -221,7 +233,7 @@ private struct ListeningSection: View {
                 Spacer()
                 Button(listening.isListening ? "End session" : "Start session") { listening.toggle() }
                     .disabled(isStarting)
-                    .help(ShortcutCatalog.keys(for: .toggleListening))
+                    .accessibilityHint(ShortcutCatalog.keys(for: .toggleListening))
             }
             LabeledContent("Microphone (Me)") {
                 switch microphone {
@@ -230,7 +242,9 @@ private struct ListeningSection: View {
                 case .denied, .restricted:
                     Button("Open System Settings") { MicrophoneCapture.openPrivacySettings() }
                 default:
-                    Text("Requested when starting a session").foregroundStyle(.secondary)
+                    Button("Request access (macOS dialog)") {
+                        Task { _ = await MicrophoneCapture.requestPermission(); microphone = MicrophoneCapture.permission }
+                    }
                 }
             }
             Toggle(Copy.Settings.autoAnswer, isOn: $settings.autoAnswer)
@@ -330,6 +344,7 @@ private struct LoginItemToggle: View {
         Toggle(isOn: Binding(get: { status == .enabled || status == .requiresApproval }, set: setOpensAtLogin)) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(Copy.Settings.openAtLogin)
+                Text("macOS may show a login-item approval outside this protected panel.").font(.caption).foregroundStyle(.secondary)
                 if status == .requiresApproval {
                     Button(Copy.Settings.openAtLoginApprove) { SMAppService.openSystemSettingsLoginItems() }
                         .buttonStyle(.link)

@@ -69,6 +69,7 @@ struct SessionDetail: View {
     let record: SessionRecord
     var onExport: () -> Void = {}
     var onDelete: () -> Void = {}
+    @State private var confirmsDelete = false
 
     var body: some View {
         ScrollView {
@@ -79,9 +80,17 @@ struct SessionDetail: View {
                         .font(.callout).foregroundStyle(.secondary)
                     HStack {
                         Button(Copy.History.export, action: onExport)
-                        Button(Copy.History.delete, role: .destructive, action: onDelete)
+                        Button(Copy.History.delete, role: .destructive) { confirmsDelete = true }
                     }
                     .padding(.top, 2)
+                    Text("Export opens a macOS save dialog visible in a screen share. End any listening session first, including a paused session, then click Export again.").font(.caption).foregroundStyle(.secondary)
+                    if confirmsDelete {
+                        Text(Copy.History.deleteMessage).font(.caption)
+                        HStack {
+                            Button(Copy.History.keep) { confirmsDelete = false }
+                            Button(Copy.History.delete, role: .destructive) { confirmsDelete = false; onDelete() }
+                        }
+                    }
                 }
                 if let notes = record.notes, let email = record.email {
                     MeetingNotesCard(report: MeetingReport(notes: notes, email: email, review: record.review, stats: SpeechStats(transcript: record.transcript)), allowsSelection: true)

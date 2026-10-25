@@ -74,13 +74,12 @@ final class PillMenuController {
     func close(restoringKeyboard: Bool) {
         guard isOpen else { return }
         isOpen = false
-        let previous = previousApp
         previousApp = nil
         monitors.forEach(NSEvent.removeMonitor)
         monitors = []
         panel.allowsKey = false
         panel.orderOut(nil)
-        if restoringKeyboard, let previous, NSWorkspace.shared.frontmostApplication?.processIdentifier != previous.processIdentifier { previous.activate() }
+        // Non-activating panels return keyboard ownership through AppKit without app activation.
     }
 
     func choose(_ id: String) {

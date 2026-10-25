@@ -12,22 +12,52 @@ struct CasesList: View {
     var answeringID: String?
     var selectedID: String?
     var answers: [String: String] = [:]
+    var updatedIDs: Set<String> = []
     var onAnswer: (Int) -> Void = { _ in }
     var onPin: (Int) -> Void = { _ in }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: 4) {
-            ForEach(Array(topics.enumerated()), id: \.element.id) { index, topic in
-                CaseRow(
-                    topic: topic, keys: keys.indices.contains(index) ? keys[index] : "", isAnswering: answeringID == topic.id,
-                    isSelected: selectedID == topic.id, answerPreview: answers[topic.id], onAnswer: { onAnswer(index) }, onPin: { onPin(index) }
-                )
-                .transition(reduceMotion ? .opacity : .asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
+        ScrollViewReader { proxy in
+        ScrollView(.horizontal) {
+            HStack(spacing: 6) {
+                ForEach(Array(topics.enumerated()), id: \.element.id) { index, topic in
+                    Button { onAnswer(index) } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(topic.title).font(.system(size: 12.5, weight: .semibold)).lineLimit(2).padding(.trailing, 18)
+                            Text(updatedIDs.contains(topic.id) ? "Updated answer · open" : selectedID == topic.id ? "Reading" : answers[topic.id] == "Preparing…" ? "Preparing…" : answers[topic.id] == nil ? "Open answer" : "Answer available")
+                                .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                        }
+                        .frame(width: 170, height: 52, alignment: .leading)
+                        .padding(8)
+                        .background(FicheStyle.accent.opacity(selectedID == topic.id ? 0.18 : 0.05), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .overlay(alignment: .topTrailing) {
+                        Button { onPin(index) } label: {
+                            Image(systemName: topic.isPinned ? "pin.fill" : "pin")
+                                .font(.system(size: 10)).frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(topic.isPinned ? Copy.Panel.unpin : Copy.Panel.pin)
+                    }
+                    .id(topic.id)
+                    .accessibilityLabel(topic.title)
+                    .accessibilityAddTraits(selectedID == topic.id ? .isSelected : [])
+                    .accessibilityAction(named: topic.isPinned ? Copy.Panel.unpin : Copy.Panel.pin) { onPin(index) }
+                }
             }
         }
-        .animation(FicheStyle.motion(reduceMotion), value: topics.map(\.id))
+        .frame(height: topics.isEmpty ? 0 : 76)
+        .onChange(of: selectedID) { if let selectedID { proxy.scrollTo(selectedID, anchor: .center) } }
+        .background(GeometryReader { geometry in
+            Color.clear.onChange(of: geometry.size.width) {
+                if let selectedID { proxy.scrollTo(selectedID, anchor: .center) }
+            }
+        })
+        }
     }
+
 }
 
 struct CaseRow: View {
@@ -150,10 +180,10 @@ struct ActionBar: View {
         VStack(alignment: .leading, spacing: 6) {
             // The icons go first when the panel is made narrow.
             ViewThatFits(in: .horizontal) {
-                actions([.answer, .whatToSay, .questions, .notes])
+                actions([.answer, .whatToSay, .questions])
                 VStack(alignment: .leading, spacing: 4) {
                     actions([.answer, .whatToSay])
-                    actions([.questions, .notes])
+                    actions([.questions])
                 }
             }
             HStack(spacing: 4) {

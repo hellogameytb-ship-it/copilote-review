@@ -1,20 +1,13 @@
 # Copilote — source review snapshot
 
-Native macOS conversation-assistance application, written in Swift, SwiftUI and AppKit.
+Native macOS conversation assistance in Swift, SwiftUI and AppKit. This sanitized snapshot corresponds to the build 12 source, replacing the older review snapshot. See [AGENT_HANDOFF.md](AGENT_HANDOFF.md) for changes, architecture, validation and remaining limits.
 
-This standalone snapshot is intended for source review and proposed patches. It does not include the original Git history, personal knowledge base, interview profiles, session data, recordings, screenshots, signing identity or demo fixtures. It predates ongoing UI and profile changes in the private working project. Do not assume feature parity with the installed application.
+This repository has its own history and pseudonymous commit identity. It excludes personal documents, knowledge vaults, interview context, notes, credentials, recordings, screenshots, signing identity, private reports and original Git history. Profiles contain generic instructions; provide your own synthetic context for review.
 
 ## Development
 
-Requires macOS, Xcode and XcodeGen. Review `project.yml` and set your own signing configuration before building. `make gen` generates the Xcode project; `make build` builds the app; `make kit-test` runs framework tests. Commands requiring omitted fixtures need your own synthetic data. This sanitized export has not been independently built or runtime-tested.
+Requires macOS, Xcode and XcodeGen. Configure your own signing identity in `project.yml`. `make gen` generates the project, `make build` builds the app, and `make kit-test` runs framework tests. Demo fixtures are omitted; commands requiring them need synthetic replacements. This sanitized export has not been independently built or runtime-tested. Upstream test results in the handoff do not establish validation of a separately signed build.
 
-## Review map
+Use assistance only where permitted. Window capture-exclusion flags do not guarantee invisibility to screen-sharing or recording tools, including ScreenCaptureKit-based capture. Cursor visibility is not guaranteed.
 
-- `Copilote/`: native app, panels, settings, input and session integration.
-- `CopiloteKit/`: reusable conversation, provider, audio and indexing logic.
-- `CopiloteKitTests/`: framework tests.
-- `Replay/`, `Tools/`, `scripts/`: diagnostics and development utilities.
-
-Use synthetic examples only. Never add credentials or private documents. Capture-exclusion settings do not guarantee invisibility in screen-sharing applications. Use assistance only where permitted.
-
-Vendored dependency license notices remain under `Copilote/Resources/web/vendor/licenses/`. No additional license grant is made for project code by this README.
+Vendored license notices remain under `Copilote/Resources/web/vendor/licenses/`. This README makes no additional license grant for project code.

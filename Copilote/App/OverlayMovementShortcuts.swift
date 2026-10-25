@@ -31,7 +31,10 @@ final class OverlayMovementShortcuts {
         for name in [Notification.Name.copiloteFirstResponderChanged, NSWindow.didBecomeKeyNotification,
                      NSWindow.didResignKeyNotification, NSApplication.didHideNotification, NSApplication.didUnhideNotification] {
             observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.refresh() }
+                MainActor.assumeIsolated {
+                    self?.refresh()
+                    DispatchQueue.main.async { [weak self] in self?.refresh() }
+                }
             })
         }
         subscription = overlay.model.$machine.sink { [weak self] machine in
@@ -41,11 +44,11 @@ final class OverlayMovementShortcuts {
     }
 
     func refresh(presentation: OverlayMachine.Presentation? = nil, typing: Bool? = nil) {
-        let key = NSApp.keyWindow
+        let key = NSApp.keyWindow.flatMap { $0.isKeyWindow ? $0 : nil }
         let responder = key?.firstResponder
         let editing = (responder as? NSTextView)?.isEditable == true || responder is NSTextField
         // Settings and shortcut recorders keep their normal keyboard commands too.
-        let otherWindow = key != nil && !(key is OverlayPanel)
+        let otherWindow = key != nil && (!(key is OverlayPanel) || key?.title == "Copilote Settings")
         enabled = (presentation ?? overlay.model.machine.presentation) != .hidden
             && !(typing ?? overlay.model.isTyping) && !editing && !otherWindow && !NSApp.isHidden
         let names = Self.bindings.map(\.0)

@@ -44,7 +44,6 @@ final class ScreenCapturer {
 
     func capture(_ screen: NSScreen) async throws -> CGImage {
         guard Self.hasPermission else {
-            Self.requestPermission()
             throw CaptureError.permissionDenied
         }
         let content: SCShareableContent

@@ -10,6 +10,9 @@ enum ShortcutSetup {
     private static var observer: NSObjectProtocol?
 
     static func start() {
+        let retired = KeyboardShortcuts.Name("toggleMode")
+        KeyboardShortcuts.disable(retired)
+        KeyboardShortcuts.setShortcut(nil, for: retired)
         applyDefaults()
         observer = DistributedNotificationCenter.default().addObserver(
             forName: NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String), object: nil, queue: .main

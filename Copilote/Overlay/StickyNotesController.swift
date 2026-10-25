@@ -14,14 +14,22 @@ final class StickyNotesController: ObservableObject {
     private var subscriptions: Set<AnyCancellable> = []
     private var hiddenWithOverlay = false
     private var moving = false
+    @Published private(set) var archiveVisible = false
+    var hasArchive: Bool { notes.contains { $0.profileID == "excel-interview" && $0.deletedAt == nil } }
     var windowNumbers: [Int] { panels.values.map(\.windowNumber) }
     var hasDeleted: Bool { notes.contains { $0.deletedAt != nil } }
-    var includedContext: [String] { notes.filter { $0.deletedAt == nil && $0.includeInAI && !$0.text.isEmpty }.map(\.text) }
+    var includedContext: [String] { notes.filter { $0.deletedAt == nil && $0.includeInAI && $0.profileID == nil && !$0.text.isEmpty }.map(\.text) }
 
     init(settings: SettingsStore) {
         self.settings = settings; defaults = settings.defaults
         notes = defaults.data(forKey: "stickyNotesV1").flatMap { try? JSONDecoder().decode([StickyNote].self, from: $0) } ?? []
         isVisible = defaults.object(forKey: "stickyNotesVisible") as? Bool ?? true
+        for i in notes.indices where notes[i].profileID == "excel-interview" { notes[i].includeInAI = false }
+        if !DiagnosticRecette.isRequested {
+            let path = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Copilote/Pending/Excel-interview-personal-notes.json")
+            if let data = try? Data(contentsOf: path) { importPreparedNotes(data) }
+        }
+        save()
         settings.$overlayOpacity.sink { [weak self] density in
             self?.panels.values.forEach { ($0.contentView as? FrostedSurface)?.density = density }
         }.store(in: &subscriptions)
@@ -43,6 +51,23 @@ final class StickyNotesController: ObservableObject {
         })
     }
 
+    func applies(_ note: StickyNote) -> Bool { note.profileID == nil || (note.profileID == "excel-interview" && archiveVisible) }
+    func toggleArchive() { archiveVisible.toggle(); if archiveVisible { isVisible = true }; restoreWindows() }
+    func importPreparedNotes(_ data: Data) {
+        struct Payload: Decodable {
+            struct Item: Decodable { let stableKey: String; let title: String; let text: String }
+            let notes: [Item]
+        }
+        guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else { return }
+        let screen = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1000, height: 800)
+        for (index, item) in payload.notes.enumerated() where !notes.contains(where: { $0.sourceKey == item.stableKey }) {
+            var note = StickyNote(text: item.text, frame: CGRect(x: screen.minX + 30 + CGFloat(index % 2) * 300, y: screen.maxY - 260 - CGFloat(index / 2) * 240, width: 290, height: 230))
+            note.title = item.title; note.profileID = "excel-interview"; note.sourceKey = item.stableKey
+            note.isPinned = true; note.includeInAI = false; notes.append(note)
+        }
+        save()
+    }
+
     func add() {
         let screen = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1000, height: 700)
         let offset = CGFloat(notes.filter { $0.deletedAt == nil }.count % 6) * 26
@@ -54,7 +79,7 @@ final class StickyNotesController: ObservableObject {
         notes[i].text = text; save()
     }
     func setIncluded(_ included: Bool, for id: UUID) {
-        guard let i = notes.firstIndex(where: { $0.id == id }) else { return }
+        guard let i = notes.firstIndex(where: { $0.id == id }), notes[i].profileID == nil else { return }
         notes[i].includeInAI = included; save()
     }
     func togglePin(_ id: UUID) {
@@ -79,7 +104,7 @@ final class StickyNotesController: ObservableObject {
             let panel = panels[note.id] ?? makePanel(note)
             notes[i].frame = StickyNote.fitted(note.frame, screens: NSScreen.screens.map(\.visibleFrame))
             panel.setFrame(notes[i].frame, display: false)
-            if isVisible && !hiddenWithOverlay { panel.orderFrontRegardless() } else { panel.orderOut(nil) }
+            if isVisible && !hiddenWithOverlay && applies(note) && !ProcessInfo.processInfo.arguments.contains("-RecetteProfileOnly") { panel.orderFrontRegardless() } else { panel.orderOut(nil) }
         }
         save()
     }
@@ -113,6 +138,7 @@ struct StickyNotesBar: View {
         HStack(spacing: 12) {
             Button("+ Personal note", action: notes.add)
             Button(notes.isVisible ? "Hide notes" : "Show notes", action: notes.toggleVisible)
+            if notes.hasArchive { Button(notes.archiveVisible ? "Close Excel archive" : "Excel archive", action: notes.toggleArchive) }
             if notes.hasDeleted { Button("Restore deleted", action: notes.restoreLastDeleted) }
             Spacer()
         }.buttonStyle(.plain).font(.system(size: 10.5)).foregroundStyle(.secondary)
@@ -128,14 +154,18 @@ private struct StickyNoteView: View {
             VStack(spacing: 7) {
                 HStack {
                     NoteDragHandle(locked: note.isPinned).frame(width: 28, height: 20)
-                    Text("Personal note").font(.system(size: 12, weight: .semibold))
+                    Text(note.title ?? "Personal note").font(.system(size: 12, weight: .semibold))
                     Spacer()
                     Button(note.isPinned ? "Unpin" : "Pin") { controller.togglePin(id) }
                     Button("Delete") { controller.delete(id) }
                 }.buttonStyle(.plain).font(.system(size: 10.5))
                 StickyEditor(text: note.text, onChange: { controller.setText($0, for: id) })
-                Toggle("Use as AI context", isOn: Binding(get: { note.includeInAI }, set: { controller.setIncluded($0, for: id) }))
-                    .toggleStyle(.checkbox).font(.system(size: 10.5))
+                if note.profileID == "excel-interview" {
+                    Label("Excel archive · Private · Excluded from AI", systemImage: "archivebox").font(.system(size: 10.5))
+                } else {
+                    Toggle("Use as AI context", isOn: Binding(get: { note.includeInAI }, set: { controller.setIncluded($0, for: id) }))
+                        .toggleStyle(.checkbox).font(.system(size: 10.5))
+                }
                 Text(note.includeInAI ? "Included in future requests until unchecked" : "Private · saved only on this Mac")
                     .font(.system(size: 9.5)).foregroundStyle(.secondary)
             }.padding(10).foregroundStyle(.white)

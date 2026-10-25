@@ -10,11 +10,12 @@ struct BaseSection: View {
 
     var body: some View {
         Section("Brain") {
+            Text("Finder and macOS file dialogs may be visible in a screen share. Folder dialogs are unavailable during a listening session, including when paused; end the session and click again.").font(.caption).foregroundStyle(.secondary)
             LabeledContent("Folder") {
                 HStack(spacing: 6) {
                     Text(abbreviated(settings.baseFolder)).lineLimit(1).truncationMode(.middle).foregroundStyle(.secondary)
-                    Button("Open") { NSWorkspace.shared.open(base.root) }
-                    Button("Choose…") {
+                    Button("Open in Finder") { NSWorkspace.shared.open(base.root) }
+                    Button("Choose (macOS)…") {
                         guard let folder = chooseFolder() else { return }
                         if let problem = BaseController.problem(withBaseFolder: folder) {
                             refused = problem
@@ -46,7 +47,7 @@ struct BaseSection: View {
                 HStack {
                     Text("Additional photo folders")
                     Spacer()
-                    Button("Add…") {
+                    Button("Add (macOS)…") {
                         if let folder = chooseFolder(), !settings.basePhotoFolders.contains(folder.path) {
                             settings.basePhotoFolders.append(folder.path)
                             base.foldersChanged()
@@ -75,7 +76,7 @@ struct BaseSection: View {
                 Text("Show source card").tag(PersonalRouter.Mode.show.rawValue)
                 Text("Suggest source card").tag(PersonalRouter.Mode.suggest.rawValue)
                 Text("Disabled (provider only)").tag(PersonalRouter.Mode.off.rawValue)
-            }
+            }.pickerStyle(.radioGroup)
             if !base.isReadOnly {
             Toggle("Generate photo captions while indexing", isOn: $settings.basePhotoCaptions)
             Text("Search stays on your Mac. Showing source cards needs no network or model call. The provider can "
@@ -103,10 +104,7 @@ struct BaseSection: View {
     }
 
     private func chooseFolder() -> URL? {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        return panel.runModal() == .OK ? panel.url : nil
+        do { refused = nil; return try SystemDialogs.chooseFolder() }
+        catch { refused = error.localizedDescription; return nil }
     }
 }

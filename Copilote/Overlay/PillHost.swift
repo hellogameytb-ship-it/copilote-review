@@ -9,7 +9,6 @@ struct PillHost: View {
     @ObservedObject var overlay: OverlayModel
     let onAsk: () -> Void
     @ObservedObject var settings: SettingsStore
-    let onStealth: () -> Void
     let onUnfold: () -> Void
     /// ⚙: the menu for this state, under the button (its frame in the pill's coordinates).
     var onMenu: (PillState, CGRect) -> Void = { _, _ in }
@@ -19,11 +18,15 @@ struct PillHost: View {
             let state = PillState(
                 isListening: listening.isListening, isPaused: listening.isPaused, elapsed: listening.elapsed(at: context.date),
                 mode: assist.mode, provider: providerName, providerDetail: providers.activeDescription, isUnfolded: overlay.isUnfolded,
-                isStealth: settings.stealth, labels: ShortcutLabels.current
+                isStealth: settings.stealth, autoAnswer: settings.autoAnswer, labels: ShortcutLabels.current
             )
             PillView(
                 state: state,
-                onListen: listening.pauseOrResume, onStop: listening.toggle, onAsk: onAsk, onStealth: onStealth, onUnfold: onUnfold,
+                onListen: listening.pauseOrResume, onStop: listening.toggle, onAsk: onAsk, onStealth: { settings.stealth.toggle() },
+                onAutoAnswer: { settings.autoAnswer.toggle() }, onPrivacyHelp: {
+                    if !overlay.isUnfolded { onUnfold() }
+                    overlay.showsPrivacyHelp.toggle()
+                }, onUnfold: onUnfold,
                 onMenu: { onMenu(state, $0) }
             )
         }

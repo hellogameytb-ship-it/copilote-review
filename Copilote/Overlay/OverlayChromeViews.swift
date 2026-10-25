@@ -22,6 +22,7 @@ private let accent = FicheStyle.accent
 
 /// Everything below the header: cases, fiche, actions, "Demander", notes, the answer, the transcript.
 struct OverlayBody: View {
+    @ObservedObject var settings: SettingsStore
     @ObservedObject var listening: ListeningController
     @ObservedObject var session: SessionController
     @ObservedObject var base: BaseController
@@ -35,14 +36,24 @@ struct OverlayBody: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if listening.isListening {
-                Text("Hands-free · \(listening.transcript.lines.count) phrases retained for this session")
-                    .font(.system(size: 10.5)).foregroundStyle(.secondary).padding(.vertical, 4)
+            if overlay.showsPrivacyHelp {
+                HStack(alignment: .top) {
+                    Text(Copy.Settings.stealthHelp).font(.system(size: 11)).fixedSize(horizontal: false, vertical: true)
+                    Button("Close") { overlay.showsPrivacyHelp = false }.buttonStyle(.plain).font(.system(size: 11))
+                }.padding(10).background(Color.black.opacity(0.2))
             }
-            TopicCasesView(listening: listening, session: session, selectedID: assist.target?.id)
+            HStack {
+                Text(settings.infosysInterviewActive ? "Infosys — Technical interview" : "Profile · Normal").font(.system(size: 11, weight: .semibold))
+                Spacer()
+                Button(settings.infosysInterviewActive ? "Return to Normal" : "Infosys — Technical interview") { settings.infosysInterviewActive.toggle() }.buttonStyle(.plain)
+            }.padding(.horizontal, 12).padding(.vertical, 5)
+            TopicCasesView(listening: listening, session: session, selectedID: session.answeringTopicID)
             ScreenshotStackView(session: session)
+            ReadingArea(view: webView)
+                .frame(minHeight: 120, maxHeight: .infinity)
+                .layoutPriority(1)
+                .padding(.horizontal, 6)
             StickyNotesBar(notes: session.stickyNotes)
-            FicheArea(base: base, listening: listening, session: session)
             VStack(alignment: .leading, spacing: 6) {
                 ActionBar(
                     target: assist.target?.title, included: assist.context.items.filter(\.isIncluded).count,
@@ -51,6 +62,7 @@ struct OverlayBody: View {
                 )
                 if assist.isContextOpen {
                     ScrollView {
+                        FicheArea(base: base, listening: listening, session: session)
                         ContextDrawer(items: assist.context.items, onToggle: assist.toggle, onIncludeAll: assist.includeAll)
                     }
                     .frame(maxHeight: 220)
@@ -66,19 +78,6 @@ struct OverlayBody: View {
             }
             .padding(.horizontal, 6)
             .padding(.bottom, 6)
-            NotesArea(notes: notes)
-            if let say = assist.whatToSay {
-                ScrollView {
-                    WhatToSayCard(say: say, onCopy: { notes.copy(say.sentence) })
-                }
-                .padding(.horizontal, 6)
-                .padding(.bottom, 6)
-            } else {
-                ReadingArea(view: webView)
-                    .frame(minHeight: 80)
-                    .padding(.horizontal, 6)
-                    .padding(.bottom, listening.isListening || !listening.transcript.lines.isEmpty ? 0 : 6)
-            }
             TranscriptStripView(listening: listening)
         }
         .animation(FicheStyle.motion(reduceMotion), value: assist.isContextOpen)
@@ -90,12 +89,12 @@ struct OverlayBody: View {
 private struct ReadingArea: NSViewRepresentable {
     let view: NSView
 
-    func makeNSView(context: Context) -> NSView { view }
+    func makeNSView(context: Context) -> NSView { view.identifier = NSUserInterfaceItemIdentifier("CopiloteAnswerReader"); return view }
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 /// The end-of-meeting notes, while they are written and once they are.
-private struct NotesArea: View {
+struct NotesArea: View {
     @ObservedObject var notes: NotesController
 
     var body: some View {
@@ -211,7 +210,7 @@ struct TopicCasesView: View {
             }
             CasesList(
                 topics: listening.topics, keys: ShortcutCatalog.answerTopic.map { ShortcutCatalog.keys(for: $0) },
-                answeringID: session.answeringTopicID, selectedID: selectedID, answers: session.cardAnswers,
+                answeringID: session.answeringTopicID, selectedID: selectedID, answers: session.cardAnswers, updatedIDs: session.updatedTopicIDs,
                 onAnswer: { listening.answer(caseIndex: $0) }, onPin: { listening.togglePin(caseIndex: $0) }
             )
         }

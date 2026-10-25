@@ -5,43 +5,50 @@ import KeyboardShortcuts
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private lazy var settings = SettingsStore()
-    private lazy var providers = ProviderController(settings: settings)
+    private lazy var settings = DiagnosticLaunchFixture.settings() ?? SettingsStore()
+    private lazy var providers = DiagnosticLaunchFixture.isRequested
+        ? ProviderController(settings: settings, injectedProvider: RecetteProvider(), observesEnvironment: false)
+        : ProviderController(settings: settings)
     private lazy var base = BaseController(settings: settings, providers: providers)
     private lazy var overlay = OverlayController(settings: settings)
     private lazy var notes = NotesController(settings: settings, providers: providers)
-    private lazy var history = HistoryController(settings: settings)
+    private lazy var history = HistoryController(settings: settings, storeURL: DiagnosticLaunchFixture.historyURL)
     private lazy var onboarding = OnboardingController(settings: settings, providers: providers, base: base)
     private let capturer = ScreenCapturer()
     private let pillMenu = PillMenuController()
     private var session: SessionController!
     private var listening: ListeningController!
     private var assist: AssistController!
-    private var menuBar: MenuBarController!
     private var mainWindow: MainWindowController!
     private var subscriptions: Set<AnyCancellable> = []
     /// The last session's phrases, for ⌘⇧N after it ended; dropped once its notes are written.
     private var lastSessionLines: [TranscriptLine] = []
     private var isPanelUnfolded = false
     private var movementShortcuts: OverlayMovementShortcuts?
+    private var launchReady = false
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Holding a key in "Demander" opens the accents bubble, a system window seen in screen
         // shares: in Copilote only (its own preferences), a held key repeats instead. AZERTY types
         // é è à ù directly, ê through the ^ dead key.
-        if !DiagnosticRecette.isRequested { UserDefaults.standard.set(false, forKey: "ApplePressAndHoldEnabled") }
+        NSApp.setActivationPolicy(.accessory)
+        if !DiagnosticRecette.isRequested {
+            for key in ["ApplePressAndHoldEnabled", "NSAutomaticSpellingCorrectionEnabled", "NSAutomaticTextCompletionEnabled", "NSAutomaticCapitalizationEnabled", "NSAutomaticPeriodSubstitutionEnabled"] { UserDefaults.standard.set(false, forKey: key) }
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if DiagnosticRecette.startIfAsked() { return }
+        WindowPrivacy.observe(settings)
         // Copilote's own panels stay out of its captures (the welcome invites ⇧⌘↩ at step 5).
         capturer.excludedWindowNumbers = { [weak self] in
             guard let self else { return [] }
             return overlay.windowNumbers + onboarding.windowNumbers + pillMenu.windowNumbers + (session?.stickyNotes.windowNumbers ?? [])
         }
-        providers.detectCodex()
+        if !DiagnosticLaunchFixture.isRequested { providers.detectCodex() }
         session = SessionController(settings: settings, overlay: overlay, capturer: capturer, providers: providers)
         listening = ListeningController(settings: settings, providers: providers, base: base)
+        SystemDialogs.observe(listening)
         listening.answers = session
         // What to say first: the fiche above an answer folds once the answer has words.
         session.$answerPhase.removeDuplicates().sink { [weak self] in self?.base.followAnswer($0) }.store(in: &subscriptions)
@@ -62,52 +69,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.onAnswerLatestTopic = { [weak self] in self?.listening.answer(caseIndex: 0) }
         overlay.attach(
             panelBody: OverlayBody(
-                listening: listening, session: session, base: base, assist: assist, notes: notes, overlay: overlay.model,
+                settings: settings, listening: listening, session: session, base: base, assist: assist, notes: notes, overlay: overlay.model,
                 webView: overlay.readingArea, onStartTyping: { [overlay] in overlay.startTyping() }, onEndTyping: { [overlay] in overlay.endTyping() }
             ),
             pillBody: PillHost(
                 listening: listening, assist: assist, providers: providers, overlay: overlay.model,
                 onAsk: { [overlay] in overlay.startTyping() }, settings: settings,
-                onStealth: { [weak self] in self?.toggleStealth() }, onUnfold: { [overlay] in overlay.pillClicked() },
+                onUnfold: { [overlay] in overlay.pillClicked() },
                 onMenu: { [weak self] in self?.togglePillMenu($0, at: $1) }
             )
         )
         base.start()
         history.start()
-        menuBar = MenuBarController(
-            isVisible: { [overlay] in overlay.isVisible },
-            isListening: { [weak self] in self?.listening.isListening ?? false },
-            onToggleOverlay: { [overlay] in overlay.toggle() },
-            onToggleListening: { [weak self] in self?.listening.toggle() },
-            onSettings: { [weak self] in self?.showSettings() }
-        )
-        menuBar.setEnabled(settings.menuBarIcon)
         mainWindow = MainWindowController(rootView: MainView(
             settings: settings, session: session, listening: listening, providers: providers, base: base, history: history,
-            onStealth: { [weak self] in self?.setStealth($0) },
-            onMenuBarChange: { [weak self] in
-                guard let self else { return }
-                menuBar.setEnabled(settings.menuBarIcon)
-            },
-            onTour: { [weak self] in self?.onboarding.start() }
-        ))
-        NSApp.mainMenu = MainMenu.make()
-        ShortcutSetup.start()
+            onTour: { [weak self] in self?.onboarding.start() }, notes: notes
+        ), autosave: !DiagnosticLaunchFixture.isRequested)
+        NSApp.mainMenu = nil
+        if !DiagnosticLaunchFixture.isRequested { ShortcutSetup.start() }
         registerShortcuts()
 
-        // Open the usable workspace immediately; settings remain an explicit action.
-        // No activation: activating the app from a full-screen Space took the user to another Space
-        // (retours 5); the pill is a floating panel, in front without it.
-        applyStealth()
-        overlay.start()
-        session.stickyNotes.restoreWindows()
+        // A first process launch cannot reliably distinguish Finder from login/crash recovery.
+        // Stay hidden and idle. A subsequent reopen or the show shortcut is explicit intent.
+        WindowPrivacy.apply(settings.stealth)
+        WindowPrivacy.suspend()
+        session.stickyNotes.setHiddenWithOverlay(true)
         onboarding.anchor = { [overlay] in overlay.pillFrame }
         overlay.onPlaced = { [weak self] in
             self?.onboarding.layout()
             self?.pillMenu.close(restoringKeyboard: false)
         }
-        onboarding.startIfFirstLaunch()
+        WindowPrivacy.observeSystemEnvironment { [weak self] in
+            guard let self else { return }
+            Self.suspendForSleep(overlay: self.overlay, listening: self.listening)
+        }
+        // Do not interpret an initial launch/recovery event as a later user reopen.
+        DispatchQueue.main.async { [weak self] in self?.launchReady = true }
         DiagnosticSnapshot.scheduleIfAsked()
+        DiagnosticLaunchFixture.schedule(delegate: self, overlay: overlay, listening: listening, settings: settings)
     }
 
     // MARK: The ⚙ menu
@@ -126,12 +125,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The pill's menu, ⌘, and the menu bar icon: the main window (settings, history, base). A
-    /// normal window shows in screen shares: opening it leaves the stealth mode, and the pill says so.
+    /// The pill menu and settings shortcut open settings, history and the personal base. A
+    /// protected settings panel takes the keyboard without changing activation policy.
     private func showSettings() {
-        if settings.stealth { setStealth(false) }
+        guard WindowPrivacy.authorizeFromUserGesture() else { return }
         mainWindow.show()
-        NSApp.activate()
     }
 
     // MARK: After the meeting
@@ -167,6 +165,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+    func applicationShouldSaveSecureApplicationState(_ app: NSApplication) -> Bool { false }
+    func applicationShouldRestoreSecureApplicationState(_ app: NSApplication) -> Bool { false }
+    func applicationWillHide(_ notification: Notification) {
+        if session != nil { overlay.hide() }
+    }
 
     func applicationWillTerminate(_ notification: Notification) {
         if !DiagnosticRecette.isRequested { overlay.flushPlacement(); providers.stop() }
@@ -176,49 +179,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// current Space and the cursor's screen; the main window stays as it is. No activation (it
     /// can switch Spaces).
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if DiagnosticRecette.isRequested { DiagnosticRecette.onReopen?(); return false }
-        Self.reopen(overlay: overlay, mainWindow: mainWindow, stealth: settings.stealth)
+        if let reopen = DiagnosticRecette.onReopen { reopen(); return false }
+        guard launchReady else { return false }
+        Self.reopen(overlay: overlay)
         return false
     }
 
-    static func reopen(overlay: OverlayController, mainWindow: MainWindowController, stealth: Bool) {
+    static func reopen(overlay: OverlayController) {
+        guard WindowPrivacy.authorizeFromUserGesture() else { return }
         _ = NSRunningApplication.current.unhide()
         NSApp.unhideWithoutActivation()
         overlay.present()
         overlay.reveal()
     }
 
-    // MARK: Stealth mode
-
-    /// On: out of the Dock and ⌘Tab (`.accessory`), the main window closed (a normal window shows
-    /// in a screen share); the overlay stays, visible to the user, excluded from sharing as always.
-    /// Off: Dock and ⌘Tab. Hiding the overlay for oneself is ⌥⌘O, apart.
-    private func applyStealth() {
-        if settings.stealth {
-            mainWindow.close()
-            NSApp.setActivationPolicy(.accessory)
-            // Turned on from the main window: the keyboard goes back to the app in front before.
-            if NSApp.isActive { NSApp.deactivate() }
-        } else {
-            NSApp.setActivationPolicy(.regular)
-        }
-    }
-
-    private func setStealth(_ on: Bool) {
-        settings.stealth = on
-        applyStealth()
-    }
-
-    private func toggleStealth() {
-        setStealth(!settings.stealth)
+    static func suspendForSleep(overlay: OverlayController, listening: ListeningController) {
+        overlay.hide()
+        listening.suspendForPrivacy()
     }
 
     // MARK: Shortcuts
 
     private func registerShortcuts() {
         let actions: [(KeyboardShortcuts.Name, () -> Void)] = [
-            (.toggleOverlay, { [overlay] in overlay.toggle() }),
-            (.toggleMode, { [weak self] in self?.toggleStealth() }),
+            (.toggleOverlay, { [overlay] in
+                guard WindowPrivacy.authorizeFromUserGesture() else { return }
+                overlay.toggle()
+            }),
             (.captureScreen, { [weak self] in self?.session.captureFullScreen() }),
             (.captureRegion, { [weak self] in self?.session.captureRegion() }),
             (.sendCaptures, { [weak self] in self?.session.sendCaptures() }),
@@ -234,7 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (.textSmaller, { [overlay] in overlay.changeTextSize(by: -1) }),
             (.meetingNotes, { [weak self] in self?.notesNow() }),
             (.toggleClickThrough, { [overlay] in overlay.toggleClickThrough() }),
-            (.toggleListening, { [weak self] in self?.listening.toggle() }),
+            (.toggleListening, { [weak self] in self?.overlay.present(); self?.listening.toggle() }),
             // Unfolds the pill, and answers case 1 if there is one.
             (.answerLatestTopic, { [weak self] in
                 guard let self else { return }
@@ -248,7 +235,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ]
         }
         for (name, action) in actions + caseActions {
-            KeyboardShortcuts.onKeyDown(for: name, action: action)
+            let reveals: [KeyboardShortcuts.Name] = [.captureScreen, .captureRegion, .sendCaptures, .sendClipboard, .ask, .meetingNotes, .toggleListening, .answerLatestTopic] + ShortcutCatalog.answerTopic
+            KeyboardShortcuts.onKeyDown(for: name) {
+                if reveals.contains(name), !WindowPrivacy.authorizeFromUserGesture() { return }
+                action()
+            }
         }
         movementShortcuts = OverlayMovementShortcuts(overlay: overlay)
         KeyboardShortcuts.disable(ShortcutCatalog.topicsOnly)

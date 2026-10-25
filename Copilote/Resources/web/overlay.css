@@ -5,9 +5,9 @@
   --surface-strong: rgba(24, 24, 31, 0.72);
   --border: rgba(255, 255, 255, 0.07);
   --text: #f5f5f7;
-  --text-secondary: #c5c5cf;
-  /* 0.48: a clear step below secondary (≥ 6.1:1), still ≥ 4.67:1 on every surface (WCAG AA). */
-  --text-tertiary: #adadb9;
+  --text-secondary: #f2f2f5;
+  /* Solid foreground colours; contrast depends on the chosen backing and background. */
+  --text-tertiary: #ededf3;
   --accent: #a99bff; /* = FicheStyle.accent (AccentColor.colorset is its deep tone) */
   --danger: #ff8a80;
   --warning: #f2c46d;

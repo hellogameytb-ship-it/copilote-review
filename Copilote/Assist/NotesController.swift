@@ -25,6 +25,15 @@ final class NotesController: ObservableObject {
         self.providers = providers
     }
 
+    /// Long fictional notes for the opt-in layout regression recipe only.
+    func loadRecetteReport() {
+        guard DiagnosticRecette.isRequested else { return }
+        let item = ["text": "A retained session detail with decisions, context and follow-up actions.", "evidence": "fixture"]
+        let data: [String: Any] = ["title": "Retained session notes", "keyPoints": Array(repeating: item, count: 12), "decisions": [], "actions": [], "openQuestions": [], "nextSteps": []]
+        guard let json = try? JSONSerialization.data(withJSONObject: data), let notes = try? JSONDecoder().decode(MeetingNotes.self, from: json) else { return }
+        state = .ready(MeetingReport(notes: notes, email: notes.email(mode: .meeting), review: nil))
+    }
+
     /// nil when there are no notes (too short, no provider, failure: the state says why).
     @discardableResult
     func write(transcript: [TranscriptLine], mode: MeetingMode) async -> MeetingReport? {

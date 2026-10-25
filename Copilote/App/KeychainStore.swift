@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import LocalAuthentication
 
 /// The Anthropic API key lives only in the login Keychain, never on disk in clear.
 enum KeychainStore {
@@ -16,13 +17,13 @@ enum KeychainStore {
 
     /// Checks presence without reading the secret (no Keychain access prompt).
     static func hasAPIKey() -> Bool {
-        var query = baseQuery
+        var query = readQuery
         query[kSecReturnAttributes as String] = true
         return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
     }
 
     static func readAPIKey() -> String? {
-        var query = baseQuery
+        var query = readQuery
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
@@ -31,6 +32,15 @@ enum KeychainStore {
               let key = String(data: data, encoding: .utf8), !key.isEmpty
         else { return nil }
         return key
+    }
+
+    /// Background provider selection must fail quietly instead of opening authentication UI.
+    private static var readQuery: [String: Any] {
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        var query = baseQuery
+        query[kSecUseAuthenticationContext as String] = context
+        return query
     }
 
     @discardableResult

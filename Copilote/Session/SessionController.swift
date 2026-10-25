@@ -24,6 +24,7 @@ final class SessionController: ObservableObject {
     @Published private(set) var history: [HistoryEntry] = []
     /// The topic whose answer is on screen, highlighted in its case.
     @Published private(set) var answeringTopicID: String?
+    @Published private(set) var updatedTopicIDs: Set<String> = []
     /// An answer is streaming in the panel.
     @Published private(set) var isAnswering = false
     @Published private(set) var lastFinished: FinishedAnswer?
@@ -56,7 +57,8 @@ final class SessionController: ObservableObject {
     private var lastWarmUp = Date.distantPast
     private var nextRequestID = 0
     private var contextStartRequestID = 0
-    private var typedRequests: [String] = []
+    private var typedRequests: [(scope: String, text: String)] = []
+    private var profilesByRequest: [Int: String] = [:]
     private var notesByRequest: [Int: Set<UUID>] = [:]
     /// The answer in the overlay.
     private var shown: AnswerRequest?
@@ -72,6 +74,7 @@ final class SessionController: ObservableObject {
         }
 
         let id: Int
+        var profileScope = "normal"
         let input: UserInput
         let label: String
         /// Captures to put back on the stack if the request fails.
@@ -216,6 +219,7 @@ final class SessionController: ObservableObject {
         cancelAutomatic()
         requests = requests.filter { !$0.value.isAutomatic }
         cardAnswers = [:]
+        updatedTopicIDs = []
         shown?.topic = nil
         answeringTopicID = nil
     }
@@ -255,24 +259,30 @@ final class SessionController: ObservableObject {
     /// Never over an answer the user asked for; a newer automatic one replaces it.
     func answerAutomatically(_ question: AssistQuestion, label: String, topic: Topic) {
         guard let provider = providers.current() else { return }
-        for old in requests.values.filter({ $0.isAutomatic && $0.topic?.id == topic.id }) {
-            if old.topic == TopicVersion(topic), old.failure == nil { return }
+        for old in requests.values.filter({ $0.isAutomatic && $0.topic?.id == topic.id && $0.profileScope == settings.interviewScope }) {
+            if old.topic == TopicVersion(topic), old.failure == nil, old.profileScope == settings.interviewScope { return }
             old.task?.cancel()
+            if old === shown, !old.isFinal {
+                old.isFinal = true
+                old.notice = .init(kind: "warning", text: "An updated answer is preparing. Select this subject to read it.")
+                finish(old)
+            }
             requests.removeValue(forKey: old.id)
         }
-        let keepManual = isBusy
+        let keepSelection = shown != nil
+        if shown?.topic?.id == topic.id { updatedTopicIDs.insert(topic.id) }
         let request = start(.assist(question), label: label, restoring: [], topic: TopicVersion(topic), isAutomatic: true, provider: provider)
         cardAnswers[topic.id] = "Preparing…"
-        if !keepManual { show(request) }
+        if !keepSelection { show(request) }
     }
 
     func hasCachedRequest(for topic: Topic) -> Bool {
-        requests.values.contains { $0.topic == TopicVersion(topic) && $0.failure == nil }
+        requests.values.contains { $0.topic == TopicVersion(topic) && $0.failure == nil && $0.profileScope == settings.interviewScope }
     }
 
     /// Switching cards restores its request immediately; it does not start another paid call.
     func showCachedAnswer(for topic: Topic) -> Bool {
-        guard stack.isEmpty, let cached = requests.values.filter({ $0.topic == TopicVersion(topic) && $0.failure == nil }).max(by: { $0.id < $1.id }) else { return false }
+        guard stack.isEmpty, let cached = requests.values.filter({ $0.topic == TopicVersion(topic) && $0.failure == nil && $0.profileScope == settings.interviewScope }).max(by: { $0.id < $1.id }) else { return false }
         show(cached)
         return true
     }
@@ -342,6 +352,8 @@ final class SessionController: ObservableObject {
             id: nextRequestID, input: input, label: label, restoring: restoring, topic: topic,
             isAutomatic: isAutomatic, providerLabel: provider.label
         )
+        request.profileScope = settings.interviewScope
+        profilesByRequest[request.id] = settings.interviewScope
         requests[request.id] = request
         history.insert(HistoryEntry(id: request.id, date: request.started, input: request.label, text: ""), at: 0)
         conversation.preferences = settings.answerPreferences
@@ -350,12 +362,12 @@ final class SessionController: ObservableObject {
         draft.preferences = settings.answerPreferences
         let allowedNotes = Set(stickyNotes.notes.filter { $0.deletedAt == nil && $0.includeInAI }.map(\.id))
         notesByRequest[request.id] = allowedNotes
-        let earlier = history.filter { $0.id >= contextStartRequestID && $0.id != request.id && !$0.text.isEmpty && (notesByRequest[$0.id] ?? []).isSubset(of: allowedNotes) }.reversed().map {
+        let earlier = history.filter { $0.id >= contextStartRequestID && profilesByRequest[$0.id] == settings.interviewScope && $0.id != request.id && !$0.text.isEmpty && (notesByRequest[$0.id] ?? []).isSubset(of: allowedNotes) }.reversed().map {
             "Earlier assistant draft (not evidence of personal facts): \($0.input)\n\($0.text)"
         }.joined(separator: "\n\n")
         let personalNotes = stickyNotes.includedContext
-        let priorTyped = typedRequests
-        if case let .assist(question) = input, question.typed, let text = question.question { typedRequests.append(text) }
+        let priorTyped = typedRequests.filter { $0.scope == settings.interviewScope }.map(\.text)
+        if case let .assist(question) = input, question.typed, let text = question.question { typedRequests.append((settings.interviewScope, text)) }
         let requestID = request.id
         request.task = Task { [weak self] in
             do {
@@ -391,14 +403,10 @@ final class SessionController: ObservableObject {
     }
 
     private func show(_ request: AnswerRequest) {
-        // Only an automatic answer can still be streaming here: the newer request replaces it.
-        if let previous = shown, previous !== request, !previous.isFinal, !previous.isAutomatic {
-            previous.task?.cancel()
-            requests.removeValue(forKey: previous.id)
-            returnCaptures(previous)
-            updateHistory(previous, note: Copy.Session.replaced)
-        }
+        // Selection changes only the reader; other subjects keep streaming independently.
+        if !request.isFinal { lastFinished = nil }
         shown = request
+        if let topic = request.topic { updatedTopicIDs.remove(topic.id) }
         answeringTopicID = request.topic?.id
         isShowingAutomatic = request.isAutomatic
         answerPhase = AnswerPhase(text: request.text, failed: request.failure != nil)
@@ -534,6 +542,7 @@ final class SessionController: ObservableObject {
         for request in requests.values { request.task?.cancel() }
         requests = [:]
         cardAnswers = [:]
+        updatedTopicIDs = []
         shown = nil
         isShowingAutomatic = false
         answerPhase = .none

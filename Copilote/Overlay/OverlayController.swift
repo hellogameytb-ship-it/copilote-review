@@ -6,7 +6,10 @@ import SwiftUI
 /// The overlay's state for SwiftUI: folded pill, unfolded panel, hidden; typing in "Demander".
 @MainActor
 final class OverlayModel: ObservableObject {
-    @Published fileprivate(set) var machine = OverlayMachine()
+    @Published fileprivate(set) var machine: OverlayMachine = {
+        var state = OverlayMachine(); state.handle(.toggleVisibility); return state
+    }()
+    @Published var showsPrivacyHelp = false
 
     var isUnfolded: Bool { machine.presentation == .panel }
     var isTyping: Bool { machine.isTyping }
@@ -54,7 +57,12 @@ final class OverlayController {
         placement = settings.placement
         let saved = settings.defaults.string(forKey: "panelSize").map(NSSizeFromString) ?? .zero
         panelSize = saved.width >= 340 && saved.height >= 180 ? saved : OverlayPanel.defaultSize
+        panel.minSize = NSSize(width: 420, height: 540)
+        panelSize = NSSize(width: max(420, panelSize.width), height: max(540, panelSize.height))
         panel.setContentSize(panelSize)
+        observers.append(NotificationCenter.default.addObserver(forName: .copilotePresentationSuspended, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.hide() }
+        })
 
         let material = Self.material()
         panel.contentView = material
@@ -69,6 +77,7 @@ final class OverlayController {
         layoutReadingAreaOnly(in: material)
 
         let pillMaterial = Self.material()
+        pillMaterial.isCapsule = true
         pillMaterial.wantsLayer = true
         pillMaterial.layer?.cornerRadius = PillPanel.size.height / 2
         pillMaterial.layer?.masksToBounds = true
@@ -104,7 +113,7 @@ final class OverlayController {
         })
     }
 
-    var isVisible: Bool { model.machine.presentation != .hidden }
+    var isVisible: Bool { pill.isVisible }
 
     /// The overlay's surface: the HUD material, with a dark veil under the content so the text
     /// stays legible in front of a white page as in front of a dark one.
@@ -194,14 +203,14 @@ final class OverlayController {
     /// At launch: the expanded workspace, on the cursor's screen, where it was left there (top centre the
     /// first time), always fully on the screen.
     func start() {
-        screen = Self.screenUnderCursor()
-        _ = model.machine.handle(.answerStarted)
-        apply(from: .hidden)
+        present()
     }
 
     /// Any opening of the app (Dock, Finder, Spotlight, `open`), hidden mode included: the pill, in
     /// front, on the cursor's screen, at its place there.
     func present() {
+        guard WindowPrivacy.presentationAuthorized else { return }
+        if let reason = WindowPrivacy.takeBlockReason() { header.setStatus(reason, tone: .failed) }
         screen = Self.screenUnderCursor()
         if model.machine.presentation == .hidden { handle(.toggleVisibility) }
         handle(.answerStarted)
@@ -227,10 +236,11 @@ final class OverlayController {
 
     /// ⌘\: gone on the next frame (no exit animation), back where it was, on the cursor's screen.
     func toggle() {
-        handle(.toggleVisibility)
+        if model.machine.presentation == .hidden { present() } else { hide() }
     }
 
     func hide() {
+        WindowPrivacy.suspend()
         if model.machine.presentation != .hidden { handle(.toggleVisibility) }
     }
 
@@ -263,6 +273,7 @@ final class OverlayController {
     }
 
     private func handle(_ event: OverlayMachine.Event) {
+        guard WindowPrivacy.presentationAuthorized || event == .toggleVisibility || event == .endTyping else { return }
         let before = model.machine.presentation
         let effects = model.machine.handle(event)
         if before == .hidden, model.machine.presentation != .hidden { screen = Self.screenUnderCursor() }
@@ -391,8 +402,10 @@ final class OverlayController {
 
     /// Show or hide the native window group without queuing geometry animations.
     private func apply(from before: OverlayMachine.Presentation) {
+        if DiagnosticRecette.isRequested && ProcessInfo.processInfo.arguments.contains("-RecetteProfileOnly") { return }
         let now = model.machine.presentation
         guard let frames else { return }
+        if now != .hidden, !WindowPrivacy.canPresent(pill) || !WindowPrivacy.canPresent(panel) { return }
         switch now {
         case .hidden:
             pill.removeChildWindow(panel)

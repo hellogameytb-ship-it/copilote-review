@@ -87,8 +87,7 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(menuBarIcon, forKey: "menuBarIcon") }
     }
 
-    /// Mode furtif: out of the Dock and ⌘Tab (`.accessory`); the overlay stays visible to the user,
-    /// excluded from screen sharing as always. On by default (the user, retours 5).
+    /// Persisted user choice. Window sharing exclusion is a request, not a capture guarantee.
     @Published var stealth: Bool {
         didSet { defaults.set(stealth, forKey: "stealth") }
     }
@@ -121,8 +120,20 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(answerLanguage, forKey: "answerLanguage") }
     }
 
+    @Published var infosysInterviewActive: Bool {
+        didSet { defaults.set(infosysInterviewActive, forKey: "infosysInterviewActive") }
+    }
+    @Published var infosysInterviewContext: String {
+        didSet { defaults.set(infosysInterviewContext, forKey: "infosysInterviewContext") }
+    }
+    var interviewScope: String { infosysInterviewActive ? "infosys-technical" : "normal" }
+    var effectiveInstructions: String {
+        guard infosysInterviewActive else { return answerInstructions }
+        return answerInstructions + "\n\nINFOSYS — TECHNICAL INTERVIEW PROFILE. Answer in English. Use only the bounded, sourced candidate facts below. Missing or conflicting facts remain unknown. Never invent acceptance, a role, an employer's technical stack, project results or personal opinions. Distinguish completed work from planned work. For preparation and permitted interview assistance only; do not solve a supervised assessment or test whose rules prohibit assistance.\n" + String(infosysInterviewContext.prefix(8000))
+    }
+
     var answerPreferences: AnswerPreferences {
-        AnswerPreferences(instructions: answerInstructions, language: AnswerPreferences.Language(rawValue: answerLanguage) ?? .english)
+        AnswerPreferences(instructions: effectiveInstructions, language: infosysInterviewActive ? .english : AnswerPreferences.Language(rawValue: answerLanguage) ?? .english)
     }
 
     @Published var overlayBackground: OverlayBackgroundMode {
@@ -139,7 +150,7 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(answerTextScale, forKey: "answerTextScale") }
     }
 
-    static let opacityRange = 0.7...1.0
+    static let opacityRange = 0.45...1.0
 
     /// Case 1's answer is drafted and shown by itself (a request per new question).
     @Published var autoAnswer: Bool {
@@ -168,10 +179,15 @@ final class SettingsStore: ObservableObject {
         selfReview = defaults.bool(forKey: "selfReview")
         keepHistory = defaults.bool(forKey: "keepHistory")
         historyRetentionDays = defaults.object(forKey: "historyRetentionDays") as? Int ?? 30
-        menuBarIcon = defaults.bool(forKey: "menuBarIcon")
+        menuBarIcon = false
+        defaults.set(false, forKey: "menuBarIcon")
         onboardingDone = defaults.bool(forKey: "onboardingDone")
         stealth = defaults.object(forKey: "stealth") as? Bool ?? true
         answerInstructions = defaults.string(forKey: "answerInstructions") ?? ""
+        // Retain the old context and notes as a private archive; never migrate them into Infosys.
+        defaults.set(false, forKey: "excelInterviewActive")
+        infosysInterviewActive = defaults.bool(forKey: "infosysInterviewActive")
+        infosysInterviewContext = defaults.string(forKey: "infosysInterviewContext") ?? "No sourced profile configured. Infosys role, team, stack, application status and interview format are unknown. Ask for missing facts; do not assume them."
         if !defaults.bool(forKey: "englishDefaultV1") {
             defaults.set(AnswerPreferences.Language.english.rawValue, forKey: "answerLanguage")
             defaults.set(true, forKey: "englishDefaultV1")
@@ -184,8 +200,12 @@ final class SettingsStore: ObservableObject {
             defaults.set(OverlayBackgroundMode.translucent.rawValue, forKey: "overlayBackground")
             if (defaults.object(forKey: "overlayOpacity") as? Double ?? 1) == 1 { defaults.set(0.82, forKey: "overlayOpacity") }
         }
+        if !defaults.bool(forKey: "glassAppearanceV2") {
+            if defaults.object(forKey: "overlayOpacity") == nil || defaults.double(forKey: "overlayOpacity") == 0.82 { defaults.set(0.68, forKey: "overlayOpacity") }
+            defaults.set(true, forKey: "glassAppearanceV2")
+        }
         overlayOpacity = (defaults.object(forKey: "overlayOpacity") as? Double)
-            .map { min(max($0, Self.opacityRange.lowerBound), Self.opacityRange.upperBound) } ?? 0.82
+            .map { min(max($0, Self.opacityRange.lowerBound), Self.opacityRange.upperBound) } ?? 0.68
         answerTextScale = (defaults.object(forKey: "answerTextScale") as? Double).map(TextScale.clamped) ?? 1
         hasAPIKey = loadCredentials && KeychainStore.hasAPIKey()
     }

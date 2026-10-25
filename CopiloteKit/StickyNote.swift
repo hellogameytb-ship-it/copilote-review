@@ -8,6 +8,9 @@ public struct StickyNote: Codable, Equatable, Identifiable, Sendable {
     public var isPinned = false
     public var includeInAI = false
     public var deletedAt: Date?
+    public var profileID: String?
+    public var title: String?
+    public var sourceKey: String?
 
     public init(id: UUID = UUID(), text: String = "", frame: CGRect = CGRect(x: 100, y: 100, width: 280, height: 220)) {
         self.id = id; self.text = text; self.frame = frame

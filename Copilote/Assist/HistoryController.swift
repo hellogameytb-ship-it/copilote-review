@@ -15,8 +15,10 @@ final class HistoryController: ObservableObject {
     @Published private(set) var opened: SessionRecord?
     /// "Garder l'historique" is on (sessions kept before stay readable when it is off).
     @Published private(set) var isRecording = false
+    @Published private(set) var exportNotice: String?
 
     private let settings: SettingsStore
+    private let storeURL: URL
     private var store: HistoryStore?
 
     static var url: URL {
@@ -24,23 +26,24 @@ final class HistoryController: ObservableObject {
             .appendingPathComponent("Copilote/History/history.sqlite")
     }
 
-    init(settings: SettingsStore) {
+    init(settings: SettingsStore, storeURL: URL? = nil) {
         self.settings = settings
+        self.storeURL = storeURL ?? Self.url
     }
 
     /// Opens the store if history is on (or was: past sessions stay readable), applies retention.
     /// Called at launch and when the history settings change.
     func start() {
         isRecording = settings.keepHistory
-        guard settings.keepHistory || FileManager.default.fileExists(atPath: Self.url.path) else { return }
-        if store == nil { store = try? HistoryStore(url: Self.url) }
+        guard settings.keepHistory || FileManager.default.fileExists(atPath: storeURL.path) else { return }
+        if store == nil { store = try? HistoryStore(url: storeURL) }
         purge()
         reload()
     }
 
     func save(_ record: SessionRecord) {
         guard settings.keepHistory else { return }
-        if store == nil { store = try? HistoryStore(url: Self.url) }
+        if store == nil { store = try? HistoryStore(url: storeURL) }
         try? store?.save(record)
         purge()
         reload()
@@ -52,23 +55,14 @@ final class HistoryController: ObservableObject {
     }
 
     func delete(_ record: SessionRecord) {
-        let alert = NSAlert()
-        alert.messageText = Copy.History.deleteTitle(record.title)
-        alert.informativeText = Copy.History.deleteMessage
-        alert.addButton(withTitle: Copy.History.delete).hasDestructiveAction = true
-        alert.addButton(withTitle: Copy.History.keep)
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
         try? store?.delete(id: record.id)
         selection = nil
         reload()
     }
 
     func export(_ record: SessionRecord) {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "\(record.title).md"
-        panel.allowedContentTypes = [.init(filenameExtension: "md") ?? .plainText]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? record.markdown.write(to: url, atomically: true, encoding: .utf8)
+        do { exportNotice = nil; try SystemDialogs.saveMarkdown(record.markdown, name: "\(record.title).md") }
+        catch { exportNotice = error.localizedDescription }
     }
 
     private func reload() {

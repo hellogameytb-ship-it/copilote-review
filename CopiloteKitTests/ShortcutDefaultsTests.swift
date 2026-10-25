@@ -69,6 +69,10 @@ final class ShortcutDefaultsTests: XCTestCase {
         }
     }
 
+    func test_alwaysStealthHasNoModeToggleShortcut() {
+        XCTAssertFalse(ShortcutDefaults.all.contains { $0.name == "toggleMode" })
+    }
+
     func test_showHideIsOptionCommandO() {
         let toggle = ShortcutDefaults.combo(ShortcutDefaults.named("toggleOverlay"), in: azerty)
         XCTAssertEqual(toggle, KeyCombo(keyCode: 31, modifiers: [.command, .option]))

@@ -120,7 +120,7 @@ final class ProviderController: ObservableObject {
         if isWaitingForDetection { return "Detecting Codex…" }
         switch activeKind {
         case .codex: return codexProblem ?? "Codex unavailable"
-        case .anthropic: return "No Anthropic API key: ⚙ › Settings"
+        case .anthropic: return settings.hasAPIKey ? "Saved API key unavailable without Keychain interaction: ⚙ › Settings" : "No Anthropic API key: ⚙ › Settings"
         }
     }
 

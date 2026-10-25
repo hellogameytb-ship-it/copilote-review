@@ -110,6 +110,15 @@ final class ListeningController: ObservableObject {
         setPaused(!isPaused)
     }
 
+    /// Prevent an in-flight startup from becoming a live session after the screen/session leaves.
+    func suspendForPrivacy() {
+        if case .starting = state {
+            generation = UUID()
+            gate.isPaused = true
+            Task { await stop() }
+        } else if isListening { setPaused(true) }
+    }
+
     private func setPaused(_ paused: Bool) {
         guard paused != isPaused else { return }
         gate.isPaused = paused
@@ -156,7 +165,6 @@ final class ListeningController: ObservableObject {
             return
         }
         guard !channels.contains(.them) || ScreenCapturer.hasPermission else {
-            ScreenCapturer.requestPermission()
             state = .failed(CaptureError.permissionDenied.errorDescription ?? "")
             return
         }
@@ -165,9 +173,10 @@ final class ListeningController: ObservableObject {
         gate.isPaused = false
         // Set before any await: a second ⌘⇧L during the microphone prompt must not start twice.
         state = .starting("Preparing transcription…")
-        var microphoneAllowed = channels.contains(.me) && MicrophoneCapture.permission == .authorized
+        let microphoneAllowed = channels.contains(.me) && MicrophoneCapture.permission == .authorized
         if channels.contains(.me) && MicrophoneCapture.permission == .notDetermined {
-            microphoneAllowed = await MicrophoneCapture.requestPermission()
+            state = .failed("Allow microphone access in Copilote Settings first. The permission button opens a macOS dialog that may be visible in a screen share.")
+            return
         }
 
         topics = []
@@ -270,6 +279,11 @@ final class ListeningController: ObservableObject {
         autoAnswers = AutoAnswerPolicy(); answers?.forgetTopics()
         gate.isPaused = false; isPaused = false; speaking = []
         startedAt = Self.uptime; startedDate = Date(); state = .listening
+    }
+
+    func beginRecetteStartup() {
+        guard DiagnosticRecette.isRequested else { return }
+        generation = UUID(); state = .starting("Controlled startup fixture")
     }
 
     func receiveRecetteEvent(_ event: ListeningEvent) {

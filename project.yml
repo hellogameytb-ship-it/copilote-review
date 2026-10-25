@@ -13,7 +13,7 @@ settings:
     SWIFT_VERSION: "5.0"
     # Stable local signature: keeps the Screen Recording permission and the
     # Keychain ACL valid across rebuilds (ad-hoc signing would reset them).
-    DEVELOPMENT_TEAM: 
+    DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: "Apple Development"
     ENABLE_HARDENED_RUNTIME: NO
@@ -60,7 +60,7 @@ targets:
         CFBundleName: Copilote
         CFBundleDisplayName: Copilote
         CFBundleShortVersionString: "0.1.1"
-        CFBundleVersion: "7"
+        CFBundleVersion: "12"
         LSApplicationCategoryType: public.app-category.productivity
         # Starts as an agent (.accessory): launched from a full-screen Space, it never takes the user
         # to another Space; the Dock icon comes only with the stealth mode off.

@@ -12,6 +12,8 @@ enum DiagnosticStickyPersistence {
         let folder = URL(fileURLWithPath: args[output + 1], isDirectory: true)
         let defaults = UserDefaults(suiteName: suite)!
         let settings = SettingsStore(defaults: defaults, loadCredentials: false)
+        WindowPrivacy.observe(settings)
+        WindowPrivacy.authorizeFromUserGesture()
         let notes = StickyNotesController(settings: settings)
         var checks: [[String: Any]] = []
         func record(_ name: String, _ passed: Bool) { checks.append(["name": name, "passed": passed]) }

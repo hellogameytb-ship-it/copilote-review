@@ -2,7 +2,8 @@ import AppKit
 
 /// Separate background layers keep text and controls fully opaque in every appearance mode.
 final class FrostedSurface: NSView {
-    var density: Double = 0.82 { didSet { updateVeil() } }
+    var density: Double = 0.68 { didSet { updateVeil() } }
+    var isCapsule = false { didSet { updateVeil() } }
     var backgroundMode: OverlayBackgroundMode = .system { didSet { updateVeil() } }
     var blendingMode: NSVisualEffectView.BlendingMode {
         get { blur.blendingMode }
@@ -10,6 +11,7 @@ final class FrostedSurface: NSView {
     }
     private let blur = NSVisualEffectView()
     private let veil = NSView()
+    private let sheen = CAGradientLayer()
     private var accessibilityObserver: NSObjectProtocol?
 
     init() {
@@ -19,7 +21,7 @@ final class FrostedSurface: NSView {
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
         layer?.borderWidth = 0.5
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.24).cgColor
         blur.material = .popover
         blur.blendingMode = .behindWindow
         blur.state = .active
@@ -28,6 +30,9 @@ final class FrostedSurface: NSView {
         veil.wantsLayer = true
         veil.frame = bounds; veil.autoresizingMask = [.width, .height]
         addSubview(veil)
+        sheen.colors = [NSColor.white.withAlphaComponent(0.025).cgColor, NSColor.white.withAlphaComponent(0).cgColor]
+        sheen.startPoint = CGPoint(x: 0.3, y: 1); sheen.endPoint = CGPoint(x: 0.7, y: 0)
+        veil.layer?.addSublayer(sheen)
         updateVeil()
         accessibilityObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
@@ -39,23 +44,29 @@ final class FrostedSurface: NSView {
 
     func updateVeil(reduceTransparency: Bool? = nil) {
         let reduce = reduceTransparency ?? NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
-        let normalized = (min(max(density, 0.7), 1) - 0.7) / 0.3
+        let clamped = min(max(density, 0.45), 1)
+        let normalized = (clamped - 0.45) / 0.55
         let alpha: Double
         switch backgroundMode {
         case .system:
             blur.isHidden = reduce
             alpha = reduce ? 1 : 0.15 + normalized * 0.30
         case .translucent:
-            // An explicit app override: a translucent backing remains translucent even when
-            // macOS replaces all native materials with opaque accessibility surfaces.
-            blur.isHidden = true
-            alpha = 0.62 + normalized * 0.26
+            blur.isHidden = reduce
+            // When macOS disables native blur, use the familiar dark surface instead of a
+            // white/grey imitation of glass. Only the backing changes; foreground stays opaque.
+            alpha = reduce ? (isCapsule ? 0.72 + normalized * 0.28 : 0.65 + normalized * 0.35)
+                : (isCapsule ? 0.06 + normalized * 0.12 : 0.10 + normalized * 0.30)
         case .opaque:
             blur.isHidden = true
             alpha = 1
         }
-        veil.layer?.backgroundColor = NSColor(srgbRed: 0.065, green: 0.065, blue: 0.085, alpha: alpha).cgColor
+        let lightGlass = isCapsule && !reduce && backgroundMode != .opaque
+        if isCapsule { appearance = NSAppearance(named: lightGlass ? .aqua : .darkAqua) }
+        let tint: CGFloat = lightGlass ? 0.96 : 0.065
+        veil.layer?.backgroundColor = NSColor(srgbRed: tint, green: tint, blue: tint + (isCapsule ? 0 : 0.015), alpha: alpha).cgColor
     }
+    override func layout() { super.layout(); sheen.frame = bounds }
     var veilAlpha: CGFloat { veil.layer?.backgroundColor?.alpha ?? 0 }
 
     deinit {

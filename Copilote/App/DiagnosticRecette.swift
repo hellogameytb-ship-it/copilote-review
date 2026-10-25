@@ -8,7 +8,7 @@ import CopiloteKit
 /// delivered inside this process only. It never reads the clipboard or captures the desktop.
 @MainActor
 enum DiagnosticRecette {
-    static var isRequested: Bool { ProcessInfo.processInfo.arguments.contains("-CopiloteRecette") || ProcessInfo.processInfo.arguments.contains("-RecetteHardware") }
+    static var isRequested: Bool { ProcessInfo.processInfo.arguments.contains("-CopiloteRecette") || ProcessInfo.processInfo.arguments.contains("-RecetteHardware") || ProcessInfo.processInfo.arguments.contains("-PrivacyPersistence") || DiagnosticLaunchFixture.isRequested }
     static var onReopen: (() -> Void)?
     private static var task: Task<Void, Never>?
 
@@ -30,13 +30,17 @@ enum DiagnosticRecette {
 
     static func startIfAsked() -> Bool {
         let args = ProcessInfo.processInfo.arguments
+        if DiagnosticPrivacyPersistence.startIfAsked() { return true }
         if DiagnosticHardware.startIfAsked() { return true }
         if DiagnosticStickyPersistence.startIfAsked() { return true }
         guard let i = args.firstIndex(of: "-CopiloteRecette"), args.indices.contains(i + 1) else { return false }
         let folder = URL(fileURLWithPath: args[i + 1], isDirectory: true)
         let suite = "org.example.copilote.recette.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
+        defaults.set(true, forKey: "stealth")
+        defaults.set(true, forKey: "menuBarIcon")
         let settings = SettingsStore(defaults: defaults, loadCredentials: false)
+        WindowPrivacy.observe(settings)
         settings.baseFolder = folder.appendingPathComponent("unused-fixture-base").path
         settings.notesAtEnd = false; settings.keepHistory = false
         let fake = RecetteProvider()
@@ -45,6 +49,7 @@ enum DiagnosticRecette {
         let overlay = OverlayController(settings: settings)
         let session = SessionController(settings: settings, overlay: overlay, capturer: ScreenCapturer(), providers: providers)
         let listening = ListeningController(settings: settings, providers: providers, base: base)
+        SystemDialogs.observe(listening)
         listening.answers = session
         let assist = AssistController(settings: settings, session: session, base: base, overlay: overlay)
         let notes = NotesController(settings: settings, providers: providers)
@@ -53,20 +58,22 @@ enum DiagnosticRecette {
         var automaticVersions: [String] = []
         listening.onAutomaticAnswer = { topic in
             automaticVersions.append("\(topic.id):\(topic.version)")
-            assist.select(topic)
+            if session.isShowingAutomatic, session.answeringTopicID == topic.id { assist.select(topic) }
         }
-        let history = HistoryController(settings: settings)
-        let mainWindow = MainWindowController(rootView: MainView(settings: settings, session: session, listening: listening, providers: providers, base: base, history: history, onStealth: { settings.stealth = $0 }), autosave: false)
-        onReopen = { AppDelegate.reopen(overlay: overlay, mainWindow: mainWindow, stealth: settings.stealth) }
+        let history = HistoryController(settings: settings, storeURL: folder.appendingPathComponent("history.sqlite"))
+        let mainWindow = MainWindowController(rootView: MainView(settings: settings, session: session, listening: listening, providers: providers, base: base, history: history, notes: notes), autosave: false)
+        onReopen = { AppDelegate.reopen(overlay: overlay) }
         let menu = PillMenuController()
         let welcome = OnboardingController(settings: settings, providers: providers, base: base)
         welcome.anchor = { overlay.pillFrame }
         overlay.attach(
-            panelBody: OverlayBody(listening: listening, session: session, base: base, assist: assist, notes: notes, overlay: overlay.model, webView: overlay.readingArea, onStartTyping: overlay.startTyping, onEndTyping: overlay.endTyping),
-            pillBody: PillHost(listening: listening, assist: assist, providers: providers, overlay: overlay.model, onAsk: overlay.startTyping, settings: settings, onStealth: { settings.stealth.toggle(); NSApp.setActivationPolicy(settings.stealth ? .accessory : .regular) }, onUnfold: overlay.pillClicked, onMenu: { state, rect in menu.toggle(PillMenuContent.menu(for: state), anchor: overlay.screenRect(fromPill: rect)) { _ in } })
+            panelBody: OverlayBody(settings: settings, listening: listening, session: session, base: base, assist: assist, notes: notes, overlay: overlay.model, webView: overlay.readingArea, onStartTyping: overlay.startTyping, onEndTyping: overlay.endTyping),
+            pillBody: PillHost(listening: listening, assist: assist, providers: providers, overlay: overlay.model, onAsk: overlay.startTyping, settings: settings, onUnfold: overlay.pillClicked, onMenu: { state, rect in menu.toggle(PillMenuContent.menu(for: state), anchor: overlay.screenRect(fromPill: rect)) { _ in } })
         )
         NSApp.setActivationPolicy(.accessory)
-        overlay.start()
+        if !args.contains("-RecetteProfileOnly") && !args.contains("-RecettePresentationOnly") && !args.contains("-RecetteDialogGuardOnly") {
+            WindowPrivacy.authorizeFromUserGesture(); overlay.start()
+        }
         overlay.onPresentationChange = { session.stickyNotes.setHiddenWithOverlay($0 == .hidden) }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         task = Task { @MainActor in
@@ -81,14 +88,52 @@ enum DiagnosticRecette {
             func pause(_ ms: Int = 450) async { try? await Task.sleep(for: .milliseconds(ms)) }
             @MainActor func fieldEditor() -> NSTextView? { NSApp.windows.first { $0.isVisible && $0.isKeyWindow && $0 is OverlayPanel }?.firstResponder as? NSTextView }
             await pause()
+            if args.contains("-RecetteDialogGuardOnly") {
+                await DiagnosticDialogGuard.run(settings: settings, listening: listening, overlay: overlay, folder: folder, record: record)
+                defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
+            }
+            if args.contains("-RecetteProfileOnly") {
+                await DiagnosticInterviewProfile.run(settings: settings, session: session, fake: fake, record: record)
+                defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
+            }
+            if args.contains("-RecetteAppearanceOnly") {
+                await DiagnosticGlass.run(folder: folder, record: record)
+                overlay.hide(); defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
+            }
+            if args.contains("-RecettePresentationOnly") {
+                await DiagnosticPresentation.run(settings: settings, session: session, listening: listening, overlay: overlay, mainWindow: mainWindow, welcome: welcome, menu: menu, fake: fake, folder: folder, record: record)
+                defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
+            }
+            if args.contains("-RecetteReviewOnly") {
+                await DiagnosticWorkspace.run(folder: folder, overlay: overlay, settings: settings)
+                await DiagnosticInterview.run(settings: settings, session: session, listening: listening, assist: assist, overlay: overlay, mainWindow: mainWindow, fake: fake, folder: folder, record: record)
+                await DiagnosticReader.run(settings: settings, session: session, listening: listening, assist: assist, overlay: overlay, mainWindow: mainWindow, fake: fake, notes: notes, folder: folder, record: record)
+                await DiagnosticGlass.run(folder: folder, record: record)
+                record("silent review completed", true)
+                overlay.hide(); defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
+            }
             await DiagnosticWorkspace.run(folder: folder, overlay: overlay, settings: settings)
+            record("saved stealth preference is restored", settings.stealth && defaults.bool(forKey: "stealth"))
+            record("legacy menu bar icon disabled", !settings.menuBarIcon && !defaults.bool(forKey: "menuBarIcon"))
+            record("no normal-mode shortcut remains", !ShortcutCatalog.all.contains { $0.name.rawValue == "toggleMode" })
             record("pill visible", overlay.isVisible)
+            var outsideClicks = 0, foreignActivations = 0
+            let outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { _ in
+                MainActor.assumeIsolated { outsideClicks += 1 }
+            }
+            let activationMonitor = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { note in
+                MainActor.assumeIsolated {
+                    if let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                       app.processIdentifier != ProcessInfo.processInfo.processIdentifier { foreignActivations += 1 }
+                }
+            }
             for iteration in 1...(args.contains("-RecetteTypingStress") ? 60 : 15) {
+                let clicksBefore = outsideClicks, activationsBefore = foreignActivations
                 let beforeCount = session.history.count
                 overlay.startTyping(); await pause()
                 record("ask \(iteration) owns field editor", fieldEditor() != nil)
                 if fieldEditor() == nil {
-                    record("focus diagnostics typing=\(overlay.model.isTyping) key=\(NSApp.keyWindow.map { String(describing: type(of: $0)) } ?? "none") active=\(NSApp.isActive)", false)
+                    record("focus diagnostics typing=\(overlay.model.isTyping) key=\(NSApp.keyWindow.map { String(describing: type(of: $0)) } ?? "none") active=\(NSApp.isActive) outsideClicks=\(outsideClicks - clicksBefore) foreignActivations=\(foreignActivations - activationsBefore)", false)
                 }
                 if let editor = fieldEditor() {
                     editor.insertText("Question fictive AZERTY : éèàù ê [test] ?", replacementRange: NSRange(location: NSNotFound, length: 0))
@@ -100,6 +145,9 @@ enum DiagnosticRecette {
                 record("ask \(iteration) submitted and released", !overlay.model.isTyping && !session.isAnswering && session.lastFinished != nil && session.history.count == beforeCount + 1)
                 overlay.endTyping(); overlay.pillClicked()
             }
+            if let outsideMonitor { NSEvent.removeMonitor(outsideMonitor) }
+            NSWorkspace.shared.notificationCenter.removeObserver(activationMonitor)
+            if let data = try? JSONSerialization.data(withJSONObject: ["outsideClickCount": outsideClicks, "foreignActivationCount": foreignActivations, "contentOrCoordinatesRecorded": false], options: [.prettyPrinted, .sortedKeys]) { try? data.write(to: folder.appendingPathComponent("input-environment.json")) }
             if args.contains("-RecetteTypingStress") {
                 record("typing stress completed", true)
                 session.clear(); overlay.hide(); defaults.removePersistentDomain(forName: suite)
@@ -150,19 +198,17 @@ enum DiagnosticRecette {
             }
             assist.mode = .meeting
             menu.toggle(PillMenuContent.menu(for: PillState()), anchor: overlay.pillFrame) { action in
-                if action == .openApp { NSApp.setActivationPolicy(.regular); mainWindow.show() }
+                if action == .openApp { mainWindow.show() }
             }
             menu.choose(PillMenuAction.openApp.id); await pause()
-            record("gear opens real settings window", NSApp.windows.contains { $0.isVisible && $0.title == "Copilote" && !($0 is OverlayPanel) })
+            record("gear opens protected settings panel without Dock mode", NSApp.windows.contains { $0.isVisible && $0.title == "Copilote Settings" && $0 is OverlayPanel && $0.sharingType == .none } && NSApp.activationPolicy() == .accessory)
+            await DiagnosticProtectedSettings.run(folder: folder, record: record)
             DiagnosticSnapshot.write(to: folder.appendingPathComponent("settings"), spaceChanges: 0)
             mainWindow.close(); NSApp.setActivationPolicy(.accessory)
-            record("settings closed", !NSApp.windows.contains { $0.isVisible && $0.title == "Copilote" && !($0 is OverlayPanel) })
-            for policy in [NSApplication.ActivationPolicy.regular, .accessory] {
-                NSApp.setActivationPolicy(policy); await pause(100)
-                record("activation policy \(policy.rawValue)", NSApp.activationPolicy() == policy && overlay.isVisible)
-            }
+            record("settings closed", !NSApp.windows.contains { $0.isVisible && $0.title == "Copilote Settings" })
+            record("activation policy stays accessory", NSApp.activationPolicy() == .accessory && overlay.isVisible)
             overlay.hide(); record("hidden", !overlay.isVisible)
-            overlay.present(); record("restored", overlay.isVisible)
+            AppDelegate.reopen(overlay: overlay); record("restored", overlay.isVisible)
             overlay.recenter()
             for direction in [OverlayPlacement.Direction.up, .down, .left, .right] { overlay.move(direction) }
             record("moved own overlay", overlay.isVisible)
@@ -291,6 +337,7 @@ enum DiagnosticRecette {
                     await listening.stop()
                 }
             }
+            await DiagnosticReader.run(settings: settings, session: session, listening: listening, assist: assist, overlay: overlay, mainWindow: mainWindow, fake: fake, notes: notes, folder: folder, record: record)
             await DiagnosticGlass.run(folder: folder, record: record)
             await DiagnosticGroundedAnswers.run(folder: folder, record: record)
             record("recipe completed", true)
@@ -311,6 +358,8 @@ actor RecetteProvider: LLMProvider {
     private var shouldFail = false
     private(set) var conversations: [Conversation] = []
     func resetConversations() { conversations = [] }
+    private var nextReply: String?
+    func replyNext(_ text: String) { nextReply = text }
     private var delay = false
     func delayNext() { delay = true }
     private var live: (any LLMProvider)?
@@ -319,6 +368,7 @@ actor RecetteProvider: LLMProvider {
     func warmUp() async {}
     func streamAnswer(to conversation: Conversation, onText: @escaping @Sendable (String) async -> Void) async throws -> CompletedMessage {
         conversations.append(conversation)
+        let reply = nextReply; nextReply = nil
         if shouldFail { shouldFail = false; throw NSError(domain: "recette", code: 1, userInfo: [NSLocalizedDescriptionKey: "Erreur fournisseur de recette"]) }
         if let live { return try await live.streamAnswer(to: conversation, onText: onText) }
         let milliseconds = delay ? 1000 : 80
@@ -327,7 +377,7 @@ actor RecetteProvider: LLMProvider {
         var text = "Controlled fixture answer.\n\n**Say:** A controlled example.\n\n## Likely follow-ups\n- Why? → For this test."
         let input = conversation.messages.flatMap { $0["content"]?.arrayValue ?? [] }.compactMap { $0["text"]?.stringValue }.joined()
         if input.contains("Personal notes explicitly included") { text += "\nPrivate Orion interview pitch from the included note." }
-        await onText(text)
+        await onText(reply ?? text)
         return CompletedMessage(content: [["type": "text", "text": .string(text)]], stopReason: "end_turn")
     }
     func complete(system: String, prompt: String, images: [CapturedImage], schema: JSONValue?) async throws -> String { "{}" }

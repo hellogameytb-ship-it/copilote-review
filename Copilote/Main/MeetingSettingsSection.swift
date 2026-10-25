@@ -13,7 +13,7 @@ struct MeetingSettingsSection: View {
         Section(Copy.Settings.section) {
             Picker(Copy.Settings.defaultMode, selection: $settings.defaultMode) {
                 ForEach(MeetingMode.allCases, id: \.self) { Text($0.name).tag($0.rawValue) }
-            }
+            }.pickerStyle(.radioGroup)
             Toggle(isOn: $settings.notesAtEnd) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Copy.Settings.notesAtEnd)
@@ -35,8 +35,8 @@ struct MeetingSettingsSection: View {
             Picker(Copy.Settings.retention, selection: Binding(get: { settings.historyRetentionDays }, set: { settings.historyRetentionDays = $0; onHistoryChange() })) {
                 ForEach(Copy.Settings.retentionChoices, id: \.days) { Text($0.label).tag($0.days) }
             }
+            .pickerStyle(.radioGroup)
             .disabled(!settings.keepHistory)
-            Toggle(Copy.Settings.menuBar, isOn: Binding(get: { settings.menuBarIcon }, set: { settings.menuBarIcon = $0; onMenuBarChange() }))
             Button(Copy.Settings.tour, action: onTour)
         }
     }
