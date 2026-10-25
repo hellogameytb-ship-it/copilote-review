@@ -183,7 +183,7 @@ enum Copy {
         static let keyScreen = "Answer the screenshot stack"
         static let keyListen = "Start or end a session"
         static let stealthTitle = "Stealth mode"
-        static let stealthBody = "Use Stealth on/off in the pill or settings. On keeps Copilote out of the Dock and app switcher and requests exclusion from sharing. Off makes the app panels shareable. Your choice is saved."
+        static let stealthBody = "Use Stealth on/off in the pill or settings. On keeps Copilote out of the Dock and app switcher and requests exclusion from sharing. Turning off requires inline confirmation. Your confirmed choice is saved."
         static let stealthOn = "Choose Stealth in the pill"
         static let stealthWhere = "ScreenCaptureKit and other capture tools may ignore this request. No universal invisibility is promised. Test with a receiver before relying on it. macOS dialogs and indicators are not hidden."
     }

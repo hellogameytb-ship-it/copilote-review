@@ -40,11 +40,11 @@ class OverlayPanel: ProtectedPanel {
         hasShadow = true
         minSize = NSSize(width: 340, height: 180)
         appearance = NSAppearance(named: .darkAqua)
+        if DiagnosticAnchorFixture.isRequested { alphaValue = 0; ignoresMouseEvents = true }
     }
 
     weak var workspaceRoot: OverlayPanel?
     var onWorkspaceDragBegan: (() -> Void)?
-    var onWorkspaceDragEnded: (() -> Void)?
 
     func performWorkspaceDrag(with event: NSEvent) {
         let root = workspaceRoot ?? self
@@ -55,7 +55,7 @@ class OverlayPanel: ProtectedPanel {
             eventNumber: event.eventNumber, clickCount: event.clickCount, pressure: event.pressure) else { return }
         root.onWorkspaceDragBegan?()
         root.performDrag(with: translated)
-        root.onWorkspaceDragEnded?()
+        // performDrag returns immediately; WindowServer movement arrives later via didMove.
     }
 
     override func sendEvent(_ event: NSEvent) {
@@ -101,7 +101,7 @@ class OverlayPanel: ProtectedPanel {
         return accepted
     }
 
-    override var canBecomeKey: Bool { allowsKey }
+    override var canBecomeKey: Bool { allowsKey && !DiagnosticAnchorFixture.isRequested }
     override var canBecomeMain: Bool { false }
 
     private lazy var quietEditor = QuietFieldEditor.make()
@@ -144,7 +144,7 @@ private final class QuietFieldEditor: NSTextView {
     @objc func orderFrontCharacterPalette(_ sender: Any?) {}
 }
 
-/// The pill: dragged by its grip only (a click on a control never moves it), never key.
+/// The pill: dragged by its grip only; takes keys only for its inline Stealth confirmation.
 final class PillPanel: OverlayPanel {
     /// Just wider than the panel under it (440): one block, like Cluely's bar and card.
     static let size = NSSize(width: 600, height: 40)

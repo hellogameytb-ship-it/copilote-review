@@ -106,6 +106,7 @@ final class PillMenuController {
     /// keyboard), the keyboard goes back to the app in front; in the main window or another app,
     /// that window takes it.
     private func watchClicks() {
+        if DiagnosticAnchorFixture.isRequested { return }
         let kinds: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         if let local = NSEvent.addLocalMonitorForEvents(matching: kinds, handler: { [weak self] event in
             MainActor.assumeIsolated {

@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !DiagnosticLaunchFixture.isRequested { providers.detectCodex() }
         session = SessionController(settings: settings, overlay: overlay, capturer: capturer, providers: providers)
         listening = ListeningController(settings: settings, providers: providers, base: base)
+        StealthConfirmationController.observeSession(listening)
         SystemDialogs.observe(listening, defaults: settings.defaults)
         listening.answers = session
         // What to say first: the fiche above an answer folds once the answer has words.

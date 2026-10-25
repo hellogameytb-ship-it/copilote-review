@@ -10,6 +10,7 @@ final class MainWindowController {
 
     init(rootView: MainView, autosave: Bool = true) {
         window = OverlayPanel(size: NSSize(width: 1000, height: 700))
+        StealthConfirmationController.register(window, source:.settings)
         window.title = "Copilote Settings"
         window.allowsKey = true
         window.minSize = NSSize(width: 1000, height: 640)
@@ -23,7 +24,9 @@ final class MainWindowController {
             Divider()
             rootView
         }
-        window.contentView = OverlayController.surface(hosting: FirstMouseHostingView(rootView: content), cornerRadius: 14)
+        let host = FirstMouseHostingView(rootView: content)
+        host.sizingOptions = []
+        window.contentView = OverlayController.surface(hosting: host, cornerRadius: 14)
         if autosave {
             window.setFrameAutosaveName("CopiloteMainWindow")
             if !window.setFrameUsingName("CopiloteMainWindow") { window.center() }

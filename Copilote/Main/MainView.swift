@@ -60,6 +60,8 @@ private struct SettingsForm: View {
     let onMenuBarChange: () -> Void
     let onTour: () -> Void
 
+    private func requestStealth() { settings.requestStealth(!settings.stealth,from:.settings) }
+
     @State private var keyDraft = ""
     @State private var confirmsShortcutReset = false
     @State private var keyMessage: String?
@@ -72,8 +74,13 @@ private struct SettingsForm: View {
                 HStack {
                     StealthStateLabel(isOn: settings.stealth)
                     Spacer()
-                    Button(settings.stealth ? "Turn off" : "Turn on") { settings.stealth.toggle() }
+                    Button(settings.stealth ? "Turn off" : "Turn on",action:requestStealth)
+                        .background(InlineControlBounds(id:"StealthRequestSettings",action:requestStealth))
+                        .accessibilityIdentifier("StealthRequestSettings")
                         .accessibilityLabel(settings.stealth ? "Turn Stealth off" : "Turn Stealth on")
+                }
+                if let request = settings.pendingStealthOff, request.source == .settings {
+                    StealthConfirmationView(onConfirm:{ settings.confirmStealthOff(request.id) },onCancel:settings.cancelStealthOff)
                 }
                 Text(Copy.Settings.stealthHelp).font(.caption).foregroundStyle(.secondary)
                 Text("Every fresh launch stays hidden with listening off. Open Copilote again while it is running, or use \(ShortcutCatalog.keys(for: .toggleOverlay)), to show the expanded workspace. Login and recovery never resume listening. After sleep, show it explicitly and resume listening yourself.").font(.caption).foregroundStyle(.secondary)

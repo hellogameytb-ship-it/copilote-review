@@ -72,11 +72,11 @@ enum DiagnosticPresentation {
         NotificationCenter.default.post(name: NSWorkspace.didWakeNotification, object: nil); await pause()
         record("wake does not show or resume", hidden() && listening.isPaused)
         await listening.stop()
-        settings.stealth = false
+        settings.requestStealth(false, from: .settings); if let request = settings.pendingStealthOff { settings.confirmStealthOff(request.id) }
         record("explicit Stealth OFF persists without presenting hidden windows", !WindowPrivacy.enabled && hidden() && !SettingsStore(defaults: settings.defaults, loadCredentials: false).stealth)
         AppDelegate.reopen(overlay: overlay); mainWindow.show(); await pause()
         record("explicit OFF presentation uses shareable panels", overlay.isVisible && NSApp.windows.filter { $0 is ProtectedPanel && $0.isVisible }.allSatisfy { $0.sharingType == .readOnly } && NSApp.activationPolicy() == .regular)
-        settings.stealth = true; await pause()
+        settings.requestStealth(true, from: .settings); await pause()
         record("explicit ON updates every existing panel", NSApp.windows.filter { $0 is ProtectedPanel }.allSatisfy { $0.sharingType == .none } && NSApp.activationPolicy() == .accessory)
         record("all overlay surfaces opt out of state restoration", NSApp.windows.filter { $0 is OverlayPanel }.allSatisfy { !$0.isRestorable })
         DiagnosticSnapshot.write(to: folder.appendingPathComponent("explicit-reopen"), spaceChanges: 0)

@@ -3,6 +3,37 @@ import XCTest
 @testable import CopiloteKit
 
 final class OverlayPlacementTests: XCTestCase {
+    func test_presentationKeepsEveryValidPillAnchorIncludingBottomAndSideEdges() {
+        for rect in [CGRect(x: 0, y: 30, width: 1440, height: 870), CGRect(x: -1920, y: -200, width: 1920, height: 1080), CGRect(x: 0, y: 0, width: 430, height: 500)] {
+            let screen = ScreenArea(id: "fixture", visibleFrame: rect)
+            let width = min(600, rect.width)
+            for x in [rect.minX, rect.midX - width / 2, rect.maxX - width] {
+                for y in [rect.minY, rect.midY, rect.maxY - 40] {
+                    let anchor = CGRect(x:x, y:y, width:width, height:40)
+                    let result = OverlayPlacement.anchoredWorkspaceFrames(pillFrame:anchor, panelSize:CGSize(width:760,height:690), on:screen)
+                    XCTAssertEqual(result.pill, anchor, "Presentation cannot relocate a valid root")
+                    XCTAssertTrue(rect.contains(result.panel))
+                    XCTAssertFalse(result.panel.intersects(anchor))
+                    XCTAssertGreaterThan(result.panel.height, 0)
+                }
+            }
+        }
+    }
+
+    func test_presentationExpandsAboveBottomAnchorWithoutRecenteringIt() {
+        let screen = ScreenArea(id:"fixture", visibleFrame:CGRect(x:0,y:0,width:1440,height:900))
+        let result = OverlayPlacement.anchoredWorkspaceFrames(pillFrame:CGRect(x:0,y:0,width:600,height:40), panelSize:CGSize(width:760,height:690), on:screen)
+        XCTAssertEqual(result.pill, CGRect(x:0,y:0,width:600,height:40))
+        XCTAssertEqual(result.panel, CGRect(x:0,y:48,width:760,height:690))
+    }
+
+    func test_removedOrShrunkScreenClampsOnlyTheInvalidAnchor() {
+        let screen = ScreenArea(id:"remaining", visibleFrame:CGRect(x:0,y:20,width:800,height:600))
+        let result = OverlayPlacement.anchoredWorkspaceFrames(pillFrame:CGRect(x:1800,y:1000,width:600,height:40), panelSize:CGSize(width:760,height:690), on:screen)
+        XCTAssertEqual(result.pill, CGRect(x:200,y:580,width:600,height:40))
+        XCTAssertTrue(screen.visibleFrame.contains(result.panel))
+    }
+
     func test_wideWorkspaceReachesNeighbourAndReversesImmediatelyAtBottom() {
         let left = ScreenArea(id: "left", visibleFrame: CGRect(x: 0, y: 0, width: 1200, height: 900))
         let right = ScreenArea(id: "right", visibleFrame: CGRect(x: 1200, y: 0, width: 1200, height: 900))

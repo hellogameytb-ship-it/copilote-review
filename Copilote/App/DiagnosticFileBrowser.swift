@@ -136,11 +136,11 @@ enum DiagnosticFileBrowser {
             do { _ = try await cancellation.value; record("task cancellation throws", false) }
             catch { record("task cancellation closes panel and completes once", error is CancellationError && !taskBrowser.panel.isVisible) }
 
-            settings.stealth = false
+            settings.requestStealth(false, from: .settings); if let request = settings.pendingStealthOff { settings.confirmStealthOff(request.id) }
             let off = Task { try await SystemDialogs.chooseFolder() }
             let offBrowser = try await browser()
             record("Stealth OFF browser uses readOnly and regular policy", offBrowser.panel.sharingType == .readOnly && NSApp.activationPolicy() == .regular)
-            settings.stealth = true
+            settings.requestStealth(true, from: .settings)
             record("Stealth ON updates open browser policy", offBrowser.panel.sharingType == .none && NSApp.activationPolicy() == .accessory)
             offBrowser.cancel(); _ = try await off.value
             record("all recipe windows stay in ProtectedPanel hierarchy", NSApp.windows.allSatisfy { $0 is ProtectedPanel || !$0.isVisible })

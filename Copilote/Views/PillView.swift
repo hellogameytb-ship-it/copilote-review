@@ -13,6 +13,7 @@ struct PillState: Equatable {
     var providerDetail = ""
     var isUnfolded = false
     var isStealth = true
+    var confirmsStealthOff = false
     var autoAnswer = true
     var labels = ShortcutLabels()
 }
@@ -28,6 +29,8 @@ struct PillView: View {
     var onAsk: () -> Void = {}
     /// Mode furtif on / off (not hiding the overlay: ⌥⌘O does that).
     var onStealth: () -> Void = {}
+    var onConfirmStealthOff: () -> Void = {}
+    var onCancelStealthOff: () -> Void = {}
     var onAutoAnswer: () -> Void = {}
     var onPrivacyHelp: () -> Void = {}
     var onUnfold: () -> Void = {}
@@ -35,7 +38,15 @@ struct PillView: View {
     /// the pill's coordinates (top-left origin) so the drawn menu hangs under it.
     var onMenu: (CGRect) -> Void = { _ in }
 
-    var body: some View {
+    @ViewBuilder var body: some View {
+        if state.confirmsStealthOff {
+            StealthConfirmationView(compact:true,onConfirm:onConfirmStealthOff,onCancel:onCancelStealthOff)
+        } else {
+            controls
+        }
+    }
+
+    private var controls: some View {
         HStack(spacing: 8) {
             PillGrip().frame(width: 20, height: 24)
             separator
@@ -66,6 +77,8 @@ struct PillView: View {
 
             separator
             Toggle(state.autoAnswer ? "Auto ON" : "Auto OFF", isOn: Binding(get: { state.autoAnswer }, set: { _ in onAutoAnswer() }))
+                .accessibilityIdentifier("PillAutoAnswer")
+                .background(InlineControlBounds(id:"PillAutoAnswer",action:onAutoAnswer))
                 .toggleStyle(.switch).controlSize(.mini).font(.system(size: 11, weight: .medium))
             .overlayHint("Automatic answers for new subjects. Independent of listening and Stealth.")
 
@@ -76,6 +89,8 @@ struct PillView: View {
             }
             .buttonStyle(PillButtonStyle())
             .overlayHint("\(Copy.Pill.askHelp) (\(state.labels.ask))")
+            .accessibilityIdentifier("PillAsk")
+            .background(InlineControlBounds(id:"PillAsk",action:onAsk))
 
             Spacer(minLength: 2)
             separator
@@ -83,20 +98,27 @@ struct PillView: View {
             // The provider and the mode sit in this menu (`PillMenuContent`): nothing to read in the
             // pill during a call. Drawn by Copilote, not an NSMenu (a system window, seen in shares).
             GeometryReader { proxy in
-                Button { onMenu(proxy.frame(in: .global)) } label: {
+                let action = { onMenu(proxy.frame(in: .global)) }
+                Button(action:action) {
                     Image(systemName: "gearshape").font(.system(size: 11.5, weight: .medium))
                 }
                 .buttonStyle(PillButtonStyle(compact: true))
                 .overlayHint(Copy.Pill.more)
                 .accessibilityLabel(Copy.Pill.more)
+                .accessibilityIdentifier("PillMenu")
+                .background(InlineControlBounds(id:"PillMenu",action:action))
             }
             .frame(width: 28, height: 28)
 
             HStack(spacing: 5) {
                 Button(action: onPrivacyHelp) { StealthStateLabel(isOn: state.isStealth) }
+                    .accessibilityIdentifier("PillPrivacyHelp")
+                    .background(InlineControlBounds(id:"PillPrivacyHelp",action:onPrivacyHelp))
                     .buttonStyle(.plain)
                     .overlayHint(Copy.Settings.stealthHelp + " Click for details.")
                 Button(state.isStealth ? "Turn off" : "Turn on", action: onStealth)
+                    .accessibilityIdentifier("StealthRequestPill")
+                    .background(InlineControlBounds(id:"StealthRequestPill",action:onStealth))
                     .font(.system(size: 10.5, weight: .medium))
                     .buttonStyle(PillButtonStyle(compact: true))
                     .accessibilityLabel(state.isStealth ? "Turn Stealth off" : "Turn Stealth on")
@@ -110,6 +132,8 @@ struct PillView: View {
             .buttonStyle(PillButtonStyle(compact: true))
             .overlayHint(state.isUnfolded ? Copy.Pill.fold : "\(Copy.Pill.unfold) (\(state.labels.answerLatestTopic))")
             .accessibilityLabel(state.isUnfolded ? Copy.Pill.fold : Copy.Pill.unfold)
+            .accessibilityIdentifier("PillFold")
+            .background(InlineControlBounds(id:"PillFold",action:onUnfold))
         }
         .padding(.horizontal, 12)
         .frame(height: 40)

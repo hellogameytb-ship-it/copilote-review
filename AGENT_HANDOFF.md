@@ -1,3 +1,17 @@
+# Current update — candidate 15 (not installed)
+
+Stealth OFF now requires inline confirmation in the pill and settings. The same owner-specific transient token controls both paths; cancel, Escape, hiding, focus loss, suspension and session changes invalidate it. ON remains immediate; a previously confirmed OFF persists. There is no OFF shortcut.
+
+Ask/window stability: native position is tracked after asynchronous drag completion; existing anchor geometry is retained during input and answers. AppKit could shift a reattached child despite correct saved coordinates. The chosen child frame is now applied after addChildWindow.
+
+Three silent isolated runs: 721 checks each (2,163 total), 1,398 geometry measurements with zero unwanted offset. 317 framework tests pass. Parent reviewed confirmation state/lifecycle and reattachment changes, reran the window linter and verified candidate signature. These are real AppKit objects with display/focus blocked and rendered-control closures invoked, NOT physical mouse or live-focus tests. Physical clicks, drag, focus transfer and global shortcuts still need an idle authorized test window. Installed build 13 remains unchanged. Cursor exclusion is not implemented or promised.
+
+Earlier build artifacts/backups stored only in the ignored build directory became unavailable after that directory disappeared for an undetermined reason. Current candidate 15 tests and manifests were rebuilt; prior reports are historical results, not a claim that all older raw artifacts remain available.
+
+Sanitized export is source-review material and has not been independently rebuilt. Do not publish personal notes, profiles or vault contents. Private SPI remains an isolated experiment, not production code.
+
+---
+
 # Current update — build 13 and isolated experiments
 
 Build 13 adds an app-owned ProtectedFileBrowser behind the asynchronous SystemDialogs seam. Native NSOpenPanel/NSSavePanel creation is removed. Folder selection, bookmarks, cancellation, Markdown export and inline overwrite confirmation are retained. Session/hidden guards apply throughout. This non-sandboxed browser does not grant Powerbox sandbox access. Export uses exclusive creation, rejects symlink targets and rechecks replacement metadata; replacement is not a transaction against malicious concurrent writers.

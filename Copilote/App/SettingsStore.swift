@@ -88,8 +88,29 @@ final class SettingsStore: ObservableObject {
     }
 
     /// Persisted user choice. Window sharing exclusion is a request, not a capture guarantee.
-    @Published var stealth: Bool {
-        didSet { defaults.set(stealth, forKey: "stealth") }
+    @Published private(set) var stealthChoice: StealthChoice {
+        didSet {
+            if oldValue.isEnabled != stealthChoice.isEnabled { defaults.set(stealthChoice.isEnabled, forKey: "stealth") }
+        }
+    }
+    var stealth: Bool { stealthChoice.isEnabled }
+    var pendingStealthOff: StealthChoice.Request? { stealthChoice.pendingOff }
+    private var committingStealthChoice = false
+    private func updateStealth(_ next: StealthChoice) {
+        guard next != stealthChoice else { return }
+        committingStealthChoice = true
+        stealthChoice = next
+        committingStealthChoice = false
+    }
+    func requestStealth(_ enabled: Bool, from source: StealthChoice.Source) {
+        var next = stealthChoice; next.request(enabled, from:source); updateStealth(next)
+    }
+    func confirmStealthOff(_ id: UUID) {
+        var next = stealthChoice; next.confirmOff(id); updateStealth(next)
+    }
+    func cancelStealthOff() {
+        guard !committingStealthChoice, pendingStealthOff != nil else { return }
+        var next = stealthChoice; next.cancel(); updateStealth(next)
     }
 
     /// The welcome's step, kept until it is done: a relaunch asked by macOS resumes it there.
@@ -182,7 +203,7 @@ final class SettingsStore: ObservableObject {
         menuBarIcon = false
         defaults.set(false, forKey: "menuBarIcon")
         onboardingDone = defaults.bool(forKey: "onboardingDone")
-        stealth = defaults.object(forKey: "stealth") as? Bool ?? true
+        stealthChoice = StealthChoice(isEnabled: defaults.object(forKey: "stealth") as? Bool ?? true)
         answerInstructions = defaults.string(forKey: "answerInstructions") ?? ""
         // Retain the old context and notes as a private archive; never migrate them into Infosys.
         defaults.set(false, forKey: "excelInterviewActive")

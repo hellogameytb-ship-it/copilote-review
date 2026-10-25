@@ -38,6 +38,15 @@ final class OverlayController {
     private var screen: NSScreen?
     private var panelSize: NSSize
     private var placement: OverlayPlacement
+    private var hasPlacedWorkspace = false
+    private var isPlacingWorkspace = false
+    private var presentationArea: ScreenArea?
+    private var savedExpandedGeometry: (pill: NSRect, panel: NSRect)?
+    private(set) var diagnosticGeometry: [[String:String]] = []
+    private func traceGeometry(_ event:String) {
+        guard DiagnosticAnchorFixture.isRequested else { return }
+        diagnosticGeometry.append(["event":event,"pill":NSStringFromRect(pill.frame),"panel":NSStringFromRect(panel.frame),"savedPill":savedExpandedGeometry.map { NSStringFromRect($0.pill) } ?? "nil","savedPanel":savedExpandedGeometry.map { NSStringFromRect($0.panel) } ?? "nil"])
+    }
     private var savePlacement: DispatchWorkItem?
     private(set) var placementWrites = 0
     /// The app in front when typing started: it gets the keyboard back.
@@ -54,6 +63,7 @@ final class OverlayController {
 
     init(settings: SettingsStore) {
         self.settings = settings
+        StealthConfirmationController.register(pill, source:.pill)
         placement = settings.placement
         let saved = settings.defaults.string(forKey: "panelSize").map(NSSizeFromString) ?? .zero
         panelSize = saved.width >= 340 && saved.height >= 180 ? saved : OverlayPanel.defaultSize
@@ -106,7 +116,9 @@ final class OverlayController {
         panel.isMovable = false // The header delegates to the root; no independent titlebar drag.
         panel.workspaceRoot = pill
         pill.onWorkspaceDragBegan = { [weak self] in self?.onPlaced?() }
-        pill.onWorkspaceDragEnded = { [weak self] in self?.landDraggedWorkspace() }
+        observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: pill, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.landDraggedWorkspace() }
+        })
         // Clicked back into the call while typing: typing is over, the keyboard is already theirs.
         observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: panel, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.panelLostKeyboard() }
@@ -200,21 +212,18 @@ final class OverlayController {
 
     // MARK: States
 
-    /// At launch: the expanded workspace, on the cursor's screen, where it was left there (top centre the
-    /// first time), always fully on the screen.
+    /// Initial explicit presentation uses the saved placement on the cursor's screen.
     func start() {
         present()
     }
 
-    /// Any opening of the app (Dock, Finder, Spotlight, `open`), hidden mode included: the pill, in
-    /// front, on the cursor's screen, at its place there.
+    /// Reopening keeps the native workspace anchor; only the first presentation chooses a screen.
     func present() {
         guard WindowPrivacy.presentationAuthorized else { return }
         if let reason = WindowPrivacy.takeBlockReason() { header.setStatus(reason, tone: .failed) }
-        screen = Self.screenUnderCursor()
+        if !hasPlacedWorkspace { screen = Self.screenUnderCursor() }
         if model.machine.presentation == .hidden { handle(.toggleVisibility) }
         handle(.answerStarted)
-        place()
         pill.orderFrontRegardless()
         if model.isUnfolded { panel.orderFrontRegardless() }
     }
@@ -234,12 +243,13 @@ final class OverlayController {
         placement.goHome(on: area)
     }
 
-    /// ⌘\: gone on the next frame (no exit animation), back where it was, on the cursor's screen.
+    /// Hide immediately and restore at the same native anchor.
     func toggle() {
         if model.machine.presentation == .hidden { present() } else { hide() }
     }
 
     func hide() {
+        if model.isUnfolded { savedExpandedGeometry = (pill.frame, panel.frame) }
         WindowPrivacy.suspend()
         if model.machine.presentation != .hidden { handle(.toggleVisibility) }
     }
@@ -276,7 +286,7 @@ final class OverlayController {
         guard WindowPrivacy.presentationAuthorized || event == .toggleVisibility || event == .endTyping else { return }
         let before = model.machine.presentation
         let effects = model.machine.handle(event)
-        if before == .hidden, model.machine.presentation != .hidden { screen = Self.screenUnderCursor() }
+        if !hasPlacedWorkspace, before == .hidden, model.machine.presentation != .hidden { screen = Self.screenUnderCursor() }
         for effect in effects {
             switch effect {
             case .answerLatestTopic: onAnswerLatestTopic?()
@@ -322,6 +332,7 @@ final class OverlayController {
     /// screen on that side (where the block was left there).
     func move(_ direction: OverlayPlacement.Direction) {
         guard let area else { return }
+        if hasPlacedWorkspace { placement.remember(pillFrame: pill.frame, on: area) }
         let screens = NSScreen.screens.map { (screen: $0, area: Self.area($0)) }
         let landed = placement.moveWorkspace(direction, pillSize: PillPanel.size, panelSize: panelSize, on: area, among: screens.map(\.area))
         if landed.id != area.id { screen = screens.first { $0.area.id == landed.id }?.screen }
@@ -355,26 +366,41 @@ final class OverlayController {
 
     private func place() {
         guard let frames else { return }
+        isPlacingWorkspace = true
+        defer { isPlacingWorkspace = false }
         // AppKit moves the child with its parent in one native window group. No easing queues
         // on key repeat, no SwiftUI publications or preference writes during a drag.
         pill.setFrame(frames.pill, display: false)
         if panel.isVisible { panel.setFrame(frames.panel, display: false) }
-        if let area { placement.remember(pillFrame: frames.pill, on: area) }
+        hasPlacedWorkspace = true
+        if let area { placement.remember(pillFrame: pill.frame, on: area); presentationArea = area }
         onPlaced?()
     }
 
     private func panelResized() {
         panelSize = panel.frame.size
         settings.defaults.set(NSStringFromSize(panelSize), forKey: "panelSize")
-        place()
+        if let area {
+            let fitted = OverlayPlacement.anchoredWorkspaceFrames(pillFrame: pill.frame, panelSize: panelSize, on: area)
+            panel.setFrame(fitted.panel, display: false)
+        }
         persistPlacementSoon()
     }
 
     func landDraggedWorkspace() {
-        screen = pill.screen ?? Self.screenUnderCursor()
+        guard hasPlacedWorkspace, !isPlacingWorkspace else { return }
+        screen = screenContainingAnchor() ?? screen
         if let area { placement.remember(pillFrame: pill.frame, on: area) }
-        place()
+        // Observe the native root; never move it back to a previously saved offset.
+        onPlaced?()
         persistPlacementSoon()
+    }
+
+    private func screenContainingAnchor() -> NSScreen? {
+        NSScreen.screens.max {
+            let a = $0.frame.intersection(pill.frame), b = $1.frame.intersection(pill.frame)
+            return (a.isNull ? 0 : a.width * a.height) < (b.isNull ? 0 : b.width * b.height)
+        }
     }
 
     private func persistPlacementSoon() {
@@ -386,6 +412,7 @@ final class OverlayController {
 
     func flushPlacement() {
         savePlacement?.cancel(); savePlacement = nil
+        if hasPlacedWorkspace, let area { placement.remember(pillFrame: pill.frame, on: area) }
         guard settings.placement != placement else { return }
         settings.placement = placement
         placementWrites += 1
@@ -402,22 +429,39 @@ final class OverlayController {
 
     /// Show or hide the native window group without queuing geometry animations.
     private func apply(from before: OverlayMachine.Presentation) {
+        traceGeometry("apply from \(before) to \(model.machine.presentation)")
         if DiagnosticRecette.isRequested && ProcessInfo.processInfo.arguments.contains("-RecetteProfileOnly") { return }
         let now = model.machine.presentation
-        guard let frames else { return }
         if now != .hidden, !WindowPrivacy.canPresent(pill) || !WindowPrivacy.canPresent(panel) { return }
         switch now {
         case .hidden:
+            if before == .panel { savedExpandedGeometry = (pill.frame, panel.frame) }
             pill.removeChildWindow(panel)
             panel.orderOut(nil)
             pill.orderOut(nil)
         case .pill, .panel:
-            pill.setFrame(frames.pill, display: false)
-            if let area { placement.remember(pillFrame: frames.pill, on: area) }
+            if !hasPlacedWorkspace { place() }
+            if let current = screen, !NSScreen.screens.contains(where: { Self.area($0).id == Self.area(current).id }) {
+                screen = screenContainingAnchor()
+            }
+            if let actual = NSScreen.screens.first(where: { $0.visibleFrame.contains(pill.frame) }) { screen = actual }
+            guard let area else { return }
+            let frames = OverlayPlacement.anchoredWorkspaceFrames(pillFrame: pill.frame, panelSize: panelSize, on: area)
+            // Only invalid screen geometry permits an automatic correction of the root.
+            if frames.pill != pill.frame { pill.setFrame(frames.pill, display: false) }
+            let screenChanged = presentationArea != area
+            let needsScreenRepair = screenChanged && !area.visibleFrame.contains(panel.frame)
+            presentationArea = area
+            placement.remember(pillFrame: pill.frame, on: area)
             pill.orderFrontRegardless()
-            if now == .panel, !panel.isVisible || before != .panel {
-                unfold(to: frames.panel)
-            } else if now == .pill, panel.isVisible {
+            if now == .panel, before != .panel || panel.parent !== pill || needsScreenRepair {
+                let preserved = savedExpandedGeometry.flatMap { saved in
+                    !needsScreenRepair && saved.pill == pill.frame ? saved.panel : nil
+                }
+                unfold(to: preserved ?? frames.panel)
+            } else if now == .panel {
+                panel.orderFrontRegardless()
+            } else if now == .pill, panel.parent === pill || panel.isVisible {
                 fold()
             }
         }
@@ -425,13 +469,17 @@ final class OverlayController {
     }
 
     private func unfold(to target: NSRect) {
+        traceGeometry("unfold to \(NSStringFromRect(target))")
         panel.alphaValue = 1
-        panel.setFrame(target, display: true)
         if panel.parent !== pill { pill.addChildWindow(panel, ordered: .above) }
+        // Reattaching can restore an old native child offset. Apply the chosen frame AFTER it.
+        panel.setFrame(target, display: true)
         panel.orderFrontRegardless()
+        traceGeometry("unfold done")
     }
 
     private func fold() {
+        if panel.parent === pill { savedExpandedGeometry = (pill.frame, panel.frame) }
         pill.removeChildWindow(panel)
         panel.orderOut(nil)
     }

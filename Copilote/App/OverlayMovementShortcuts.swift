@@ -11,6 +11,7 @@ final class OverlayMovementShortcuts {
         (.moveUp, .up), (.moveDown, .down), (.moveLeft, .left), (.moveRight, .right)
     ]
     private let overlay: OverlayController
+    private let controlsRegistration: Bool
     private var tasks: [Task<Void, Never>] = []
     private var observers: [NSObjectProtocol] = []
     private var subscription: AnyCancellable?
@@ -18,6 +19,7 @@ final class OverlayMovementShortcuts {
 
     init(overlay: OverlayController, register: Bool = true) {
         self.overlay = overlay
+        controlsRegistration = register
         if register {
             for (name, direction) in Self.bindings {
                 tasks.append(Task { [weak self] in
@@ -52,7 +54,9 @@ final class OverlayMovementShortcuts {
         enabled = (presentation ?? overlay.model.machine.presentation) != .hidden
             && !(typing ?? overlay.model.isTyping) && !editing && !otherWindow && !NSApp.isHidden
         let names = Self.bindings.map(\.0)
-        if enabled { KeyboardShortcuts.enable(names) } else { KeyboardShortcuts.disable(names) }
+        if controlsRegistration {
+            if enabled { KeyboardShortcuts.enable(names) } else { KeyboardShortcuts.disable(names) }
+        }
     }
 
     func moveIfAllowed(_ direction: OverlayPlacement.Direction) {
@@ -65,6 +69,6 @@ final class OverlayMovementShortcuts {
         tasks.forEach { $0.cancel() }; tasks = []
         observers.forEach { NotificationCenter.default.removeObserver($0) }; observers = []
         subscription = nil
-        KeyboardShortcuts.disable(Self.bindings.map(\.0))
+        if controlsRegistration { KeyboardShortcuts.disable(Self.bindings.map(\.0)) }
     }
 }

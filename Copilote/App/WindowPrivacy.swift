@@ -17,8 +17,13 @@ enum WindowPrivacy {
     /// Own-process fault injection only; never an exclusion/capture detector.
     static var diagnosticFailure = false
     static var sharing: NSWindow.SharingType { enabled ? .none : .readOnly }
+    // The opt-in geometry fixture never creates a Dock icon or takes desktop focus.
+    private static var activationPolicy: NSApplication.ActivationPolicy {
+        DiagnosticAnchorFixture.isRequested || enabled ? .accessory : .regular
+    }
     static func observe(_ settings: SettingsStore) {
-        subscription = settings.$stealth.sink { apply($0) }
+        subscription = settings.$stealthChoice.map(\.isEnabled).removeDuplicates().sink { apply($0) }
+        StealthConfirmationController.observe(settings)
     }
     /// Public workspace events only. Becoming available never restores presentation by itself.
     static func observeSystemEnvironment(onSuspend: @escaping () -> Void) {
@@ -47,7 +52,7 @@ enum WindowPrivacy {
         for window in NSApp.windows where window is ProtectedPanel {
             window.sharingType = sharing
         }
-        let target: NSApplication.ActivationPolicy = enabled ? .accessory : .regular
+        let target = activationPolicy
         // AppKit can report no change when the requested policy is already active.
         policyReady = NSApp.activationPolicy() == target || NSApp.setActivationPolicy(target)
         policyReady = policyReady && NSApp.activationPolicy() == target
@@ -70,7 +75,7 @@ enum WindowPrivacy {
         guard presentationAuthorized, environmentAvailable else { return false }
         window.canBecomeVisibleWithoutLogin = false
         window.sharingType = sharing
-        guard policyReady, NSApp.activationPolicy() == (enabled ? .accessory : .regular),
+        guard policyReady, NSApp.activationPolicy() == activationPolicy,
               window.sharingType == sharing, !(DiagnosticRecette.isRequested && diagnosticFailure) else {
             lastBlockReason = "Display paused: local window protection could not be applied. Explicit reopening retries it."
             suspend()
@@ -86,6 +91,7 @@ enum WindowPrivacy {
 
     /// Hiding revokes presentation until another explicit gesture. Async work cannot reopen it.
     static func suspend() {
+        StealthConfirmationController.cancel()
         let wasAuthorized = presentationAuthorized
         presentationAuthorized = false
         for window in NSApp.windows where window is ProtectedPanel { window.orderOut(nil) }

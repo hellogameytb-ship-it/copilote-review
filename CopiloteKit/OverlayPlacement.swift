@@ -70,6 +70,22 @@ public struct OverlayPlacement: Codable, Equatable, Sendable {
         return (pill, CGRect(x: center - width / 2, y: pill.minY - Self.gap - height, width: width, height: height))
     }
 
+    /// Presentation expands around the live pill anchor. Only an off-screen pill is clamped;
+    /// opening content must not reposition a valid anchor to fit a larger rigid workspace.
+    public static func anchoredWorkspaceFrames(pillFrame: CGRect, panelSize: CGSize, on screen: ScreenArea) -> (pill: CGRect, panel: CGRect) {
+        let area = screen.visibleFrame
+        let size = CGSize(width: min(pillFrame.width, area.width), height: min(pillFrame.height, area.height))
+        let pill = clamped(CGRect(origin: pillFrame.origin, size: size), in: area)
+        let below = max(0, pill.minY - gap - area.minY)
+        let above = max(0, area.maxY - pill.maxY - gap)
+        let opensBelow = below >= panelSize.height || below >= above
+        let height = min(panelSize.height, opensBelow ? below : above)
+        let width = min(panelSize.width, area.width)
+        let x = min(max(pill.midX - width / 2, area.minX), area.maxX - width)
+        let y = opensBelow ? pill.minY - gap - height : pill.maxY + gap
+        return (pill, CGRect(x: x, y: y, width: width, height: height))
+    }
+
     /// Test the whole group's edge, not only the narrower pill, before crossing displays.
     public mutating func moveWorkspace(_ direction: Direction, pillSize: CGSize, panelSize: CGSize, on screen: ScreenArea, among screens: [ScreenArea]) -> ScreenArea {
         let before = workspaceFrames(pillSize: pillSize, panelSize: panelSize, on: screen).pill

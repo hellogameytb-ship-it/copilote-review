@@ -36,7 +36,7 @@ enum DiagnosticWorkspace {
         }
         record("120 native parent moves preserve child offset within one point", maxError <= 1)
         record("trajectory performs no preference writes", overlay.placementWrites == writes)
-        (pill as? OverlayPanel)?.onWorkspaceDragEnded?()
+        overlay.landDraggedWorkspace()
         await pause(350)
         record("landing keeps entire workspace on screen", pill.screen?.visibleFrame.contains(pill.frame) == true && panel.screen?.visibleFrame.contains(panel.frame) == true)
         let mover = OverlayMovementShortcuts(overlay: overlay, register: false)

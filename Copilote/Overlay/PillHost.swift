@@ -15,14 +15,20 @@ struct PillHost: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
+            let pending = settings.pendingStealthOff
             let state = PillState(
                 isListening: listening.isListening, isPaused: listening.isPaused, elapsed: listening.elapsed(at: context.date),
                 mode: assist.mode, provider: providerName, providerDetail: providers.activeDescription, isUnfolded: overlay.isUnfolded,
-                isStealth: settings.stealth, autoAnswer: settings.autoAnswer, labels: ShortcutLabels.current
+                isStealth: settings.stealth, confirmsStealthOff:settings.pendingStealthOff?.source == .pill,
+                autoAnswer: settings.autoAnswer, labels: ShortcutLabels.current
             )
             PillView(
                 state: state,
-                onListen: listening.pauseOrResume, onStop: listening.toggle, onAsk: onAsk, onStealth: { settings.stealth.toggle() },
+                onListen: listening.pauseOrResume, onStop: listening.toggle, onAsk: onAsk,
+                onStealth: { settings.requestStealth(!settings.stealth,from:.pill) },
+                onConfirmStealthOff: {
+                    if let request = pending, request.source == .pill { settings.confirmStealthOff(request.id) }
+                }, onCancelStealthOff: settings.cancelStealthOff,
                 onAutoAnswer: { settings.autoAnswer.toggle() }, onPrivacyHelp: {
                     if !overlay.isUnfolded { onUnfold() }
                     overlay.showsPrivacyHelp.toggle()

@@ -82,12 +82,12 @@ enum DiagnosticReader {
         record("main reader leaves existing session notes intact", notes.state == retainedNotes)
         mainWindow.show(); session.stickyNotes.add(); await pause()
         let noteBefore = session.stickyNotes.notes
-        settings.stealth = false; await pause()
+        settings.requestStealth(false, from: .settings); if let request = settings.pendingStealthOff { settings.confirmStealthOff(request.id) }; await pause()
         record("stealth off updates all existing app panels", NSApp.activationPolicy() == .regular && NSApp.windows.filter { $0 is OverlayPanel }.allSatisfy { $0.sharingType == .readOnly })
         let createdOff = OverlayPanel(size: NSSize(width: 300, height: 200))
         record("new panels inherit stealth off", createdOff.sharingType == .readOnly)
         record("stealth off persists across settings reconstruction", !SettingsStore(defaults: settings.defaults, loadCredentials: false).stealth)
-        settings.stealth = true; await pause()
+        settings.requestStealth(true, from: .settings); await pause()
         record("stealth on protects existing settings notes and new panels", NSApp.activationPolicy() == .accessory && NSApp.windows.filter { $0 is OverlayPanel }.allSatisfy { $0.sharingType == .none })
         record("stealth toggle preserves manual notes", session.stickyNotes.notes == noteBefore)
         record("stealth on persists across settings reconstruction", SettingsStore(defaults: settings.defaults, loadCredentials: false).stealth)
@@ -104,8 +104,8 @@ enum DiagnosticPrivacyPersistence {
         let suite = "org.example.copilote.recette.privacy-relaunch"
         let defaults = UserDefaults(suiteName: suite)!
         let settings = SettingsStore(defaults: defaults, loadCredentials: false)
-        if args.contains("-SaveStealthOn") { settings.stealth = true }
-        if args.contains("-SaveStealthOff") { settings.stealth = false }
+        if args.contains("-SaveStealthOn") { settings.requestStealth(true, from: .settings) }
+        if args.contains("-SaveStealthOff") { settings.requestStealth(false, from: .settings); if let request = settings.pendingStealthOff { settings.confirmStealthOff(request.id) } }
         WindowPrivacy.observe(settings)
         WindowPrivacy.authorizeFromUserGesture()
         let panel = OverlayPanel(); panel.title = "Privacy relaunch fixture"

@@ -34,6 +34,9 @@ enum DiagnosticRecette {
         if DiagnosticHardware.startIfAsked() { return true }
         if DiagnosticStickyPersistence.startIfAsked() { return true }
         guard let i = args.firstIndex(of: "-CopiloteRecette"), args.indices.contains(i + 1) else { return false }
+        if DiagnosticAnchorFixture.isRequested && ProcessInfo.processInfo.environment["COPILOTE_HEADLESS_GEOMETRY"] != "1" {
+            NSApp.terminate(nil); return true
+        }
         let folder = URL(fileURLWithPath: args[i + 1], isDirectory: true)
         let suite = "org.example.copilote.recette.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -49,6 +52,7 @@ enum DiagnosticRecette {
         let overlay = OverlayController(settings: settings)
         let session = SessionController(settings: settings, overlay: overlay, capturer: ScreenCapturer(), providers: providers)
         let listening = ListeningController(settings: settings, providers: providers, base: base)
+        StealthConfirmationController.observeSession(listening)
         SystemDialogs.observe(listening, defaults: settings.defaults)
         listening.answers = session
         let assist = AssistController(settings: settings, session: session, base: base, overlay: overlay)
@@ -71,7 +75,7 @@ enum DiagnosticRecette {
             pillBody: PillHost(listening: listening, assist: assist, providers: providers, overlay: overlay.model, onAsk: overlay.startTyping, settings: settings, onUnfold: overlay.pillClicked, onMenu: { state, rect in menu.toggle(PillMenuContent.menu(for: state), anchor: overlay.screenRect(fromPill: rect)) { _ in } })
         )
         NSApp.setActivationPolicy(.accessory)
-        if !args.contains("-RecetteProfileOnly") && !args.contains("-RecettePresentationOnly") && !args.contains("-RecetteDialogGuardOnly") && !args.contains("-RecetteFileBrowserOnly") {
+        if !DiagnosticAnchorFixture.isRequested && !args.contains("-RecetteProfileOnly") && !args.contains("-RecettePresentationOnly") && !args.contains("-RecetteDialogGuardOnly") && !args.contains("-RecetteFileBrowserOnly") {
             WindowPrivacy.authorizeFromUserGesture(); overlay.start()
         }
         overlay.onPresentationChange = { session.stickyNotes.setHiddenWithOverlay($0 == .hidden) }
@@ -88,6 +92,11 @@ enum DiagnosticRecette {
             func pause(_ ms: Int = 450) async { try? await Task.sleep(for: .milliseconds(ms)) }
             @MainActor func fieldEditor() -> NSTextView? { NSApp.windows.first { $0.isVisible && $0.isKeyWindow && $0 is OverlayPanel }?.firstResponder as? NSTextView }
             await pause()
+            if DiagnosticAnchorFixture.isRequested {
+                await DiagnosticAnchorFixture.run(folder: folder, overlay: overlay, settings: settings, assist: assist, session: session, menu: menu, mainWindow: mainWindow, record: record)
+                await DiagnosticStealthConfirmation.run(folder:folder,overlay:overlay,settings:settings,listening:listening,assist:assist,session:session,mainWindow:mainWindow,record:record)
+                defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
+            }
             if args.contains("-RecetteFileBrowserOnly") {
                 await DiagnosticFileBrowser.run(settings: settings, listening: listening, folder: folder, record: record)
                 defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
