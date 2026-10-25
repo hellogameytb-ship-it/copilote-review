@@ -1,3 +1,15 @@
+# Delivery — build 15 installed and checked
+
+Build 15 was installed after visible fixture validation. Exact binary SHA-256: bb91e216a1f3d6b423cb5573e15e583bd6069da1a3aaceed5be31f2a1061b71b. Signature and installed manifest were verified; build 13 was backed up outside the volatile build directory. No active session was interrupted.
+
+Visible checks exercised confirmation, focus and positioning. An Auto test initially clicked its label rather than its switch; corrected targeted clicks toggled both ways without keyboard acquisition or movement. Interrupted focus-stress cycles were not counted as passes. Visible fixture code uses the same production sources; distinguish this from physically hand-operated testing of every workflow.
+
+The installed binary started hidden, then explicitly reopened with listening stopped and Stealth ON. All 13 notes and the semantic content of 80 preferences, including shortcuts, were preserved; JSON serialization order changed for some values. No private SPI is integrated. Receiver-side screen-sharing and cursor guarantees remain unverified.
+
+The candidate-only statements below are historical and superseded by this delivery notice.
+
+---
+
 # Current update — candidate 15 (not installed)
 
 Stealth OFF now requires inline confirmation in the pill and settings. The same owner-specific transient token controls both paths; cancel, Escape, hiding, focus loss, suspension and session changes invalidate it. ON remains immediate; a previously confirmed OFF persists. There is no OFF shortcut.
