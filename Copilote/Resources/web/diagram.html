@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <!-- Renders one architecture diagram at indexing time (see MermaidRenderer). Same rules as
+       index.html: no network, no inline scripts. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data:; font-src 'self'">
+  <meta name="color-scheme" content="dark">
+  <style>
+    html, body { margin: 0; background: #1c1c22; }
+    #out { display: inline-block; padding: 16px; }
+    #out svg { display: block; max-width: none !important; height: auto; }
+  </style>
+  <script src="vendor/mermaid.min.js"></script>
+</head>
+<body>
+  <div id="out"></div>
+  <script src="diagram.js"></script>
+</body>
+</html>

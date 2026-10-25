@@ -1,0 +1,155 @@
+name: Copilote
+
+options:
+  bundleIdPrefix: org.example
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    SWIFT_VERSION: "5.0"
+    # Stable local signature: keeps the Screen Recording permission and the
+    # Keychain ACL valid across rebuilds (ad-hoc signing would reset them).
+    DEVELOPMENT_TEAM: 
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "Apple Development"
+    ENABLE_HARDENED_RUNTIME: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+packages:
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: "3.1.0"
+
+targets:
+  CopiloteKit:
+    type: framework
+    platform: macOS
+    sources:
+      - path: CopiloteKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.example.copilote.kit
+        GENERATE_INFOPLIST_FILE: YES
+        DEFINES_MODULE: YES
+        SKIP_INSTALL: YES
+    # Fast TDD loop: builds only the framework and its tests, never launches the app.
+    scheme:
+      testTargets:
+        - CopiloteKitTests
+
+  Copilote:
+    type: application
+    platform: macOS
+    sources:
+      - path: Copilote
+        excludes:
+          - "Resources/web/**"
+      - path: Copilote/Resources/web
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: CopiloteKit
+      - package: KeyboardShortcuts
+    info:
+      path: Copilote/Info.plist
+      properties:
+        CFBundleName: Copilote
+        CFBundleDisplayName: Copilote
+        CFBundleShortVersionString: "0.1.1"
+        CFBundleVersion: "7"
+        LSApplicationCategoryType: public.app-category.productivity
+        # Starts as an agent (.accessory): launched from a full-screen Space, it never takes the user
+        # to another Space; the Dock icon comes only with the stealth mode off.
+        LSUIElement: true
+        LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
+        NSPrincipalClass: NSApplication
+        NSHumanReadableCopyright: "Project contributors — personal use"
+        NSMicrophoneUsageDescription: "Copilote transcribes your voice (Me channel) on your Mac during a session you start. Audio is not recorded."
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.example.copilote
+        PRODUCT_NAME: Copilote
+        GENERATE_INFOPLIST_FILE: NO
+        COMBINE_HIDPI_IMAGES: YES
+        # One accent: system controls (switches, selection, default button) take the overlay's violet,
+        # in its deep tone (#6c5ae2: a white label reads at 5.0:1; the light tone would be 2.4:1).
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        # The bubble-pill (docs/renders/logo-*.png): the bar of Copilote turned speech bubble.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  # `make replay FILE=…`: the listening chain on a recording, without the app.
+  copilote-replay:
+    type: tool
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Replay
+    dependencies:
+      - target: CopiloteKit
+    settings:
+      base:
+        PRODUCT_NAME: copilote-replay
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path"
+        SKIP_INSTALL: YES
+    scheme: {}
+
+  # `make index DIR=…` / `make search Q=…`: the personal base without the app.
+  copilote-index:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Tools/Index
+    dependencies:
+      - target: CopiloteKit
+    settings:
+      base:
+        PRODUCT_NAME: copilote-index
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path"
+        SKIP_INSTALL: YES
+    scheme: {}
+
+  # `make renders`: the fiche cards rendered off-screen (ImageRenderer) into docs/renders/.
+  copilote-render:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Tools/Render
+      - path: Copilote/Base/FicheViews.swift
+      - path: Copilote/Views
+      - path: Copilote/App/SettingsStore.swift
+      - path: Copilote/Main/MeetingSettingsSection.swift
+      - path: Copilote/Main/AnswerSettingsSection.swift
+    dependencies:
+      - target: CopiloteKit
+    settings:
+      base:
+        PRODUCT_NAME: copilote-render
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path"
+        SKIP_INSTALL: YES
+    scheme: {}
+
+  CopiloteKitTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: CopiloteKitTests
+    dependencies:
+      - target: CopiloteKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.example.copilote.kit.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  Copilote:
+    build:
+      targets:
+        Copilote: all
+        CopiloteKitTests: [test]
+    test:
+      targets:
+        - CopiloteKitTests

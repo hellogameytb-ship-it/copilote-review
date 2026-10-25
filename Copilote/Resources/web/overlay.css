@@ -1,0 +1,254 @@
+/* Transparent reading surface over a native frosted background. */
+:root {
+  --bg: transparent;
+  --surface: rgba(20, 20, 26, 0.42);
+  --surface-strong: rgba(24, 24, 31, 0.72);
+  --border: rgba(255, 255, 255, 0.07);
+  --text: #f5f5f7;
+  --text-secondary: #c5c5cf;
+  /* 0.48: a clear step below secondary (≥ 6.1:1), still ≥ 4.67:1 on every surface (WCAG AA). */
+  --text-tertiary: #adadb9;
+  --accent: #a99bff; /* = FicheStyle.accent (AccentColor.colorset is its deep tone) */
+  --danger: #ff8a80;
+  --warning: #f2c46d;
+
+  /* Xcode "Default (Dark)" syntax palette: familiar, calm. */
+  --syn-keyword: #ff7ab2;
+  --syn-string: #ff8170;
+  --syn-number: #d9c97c;
+  --syn-comment: #7f8c98;
+  --syn-type: #dabaff;
+  --syn-function: #67b7a4;
+  --syn-attr: #cc9768;
+  --syn-variable: #b281eb;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  /* Read at a glance, at screen distance, while talking: 14px, not 13. */
+  font: 14px/1.55 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  letter-spacing: 0.005em;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+#scroller {
+  height: 100%;
+  overflow-y: auto;
+  padding: 14px 16px 18px;
+  scrollbar-width: thin;
+}
+/* Scroll edge effect instead of hard dividers: fade only where content actually continues. */
+#scroller.fade-top { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22px); }
+#scroller.fade-bottom { -webkit-mask-image: linear-gradient(to top, transparent 0, #000 22px); }
+#scroller.fade-top.fade-bottom {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%);
+}
+
+/* Empty state: what the overlay can do, nothing more. */
+.empty { color: var(--text-secondary); padding-top: 4px; }
+.empty-title { margin: 0 0 10px; color: var(--text); font-weight: 600; }
+.hints { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; }
+.hints dt { margin: 0; }
+.hints dd { margin: 0; color: var(--text-secondary); }
+kbd {
+  font: 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--text);
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 5px;
+}
+
+/* Answer typography: hierarchy from weight first, size second. */
+#answer > :first-child > :first-child { margin-top: 0; }
+#answer p { margin: 0 0 0.7em; }
+#answer h1, #answer h2, #answer h3, #answer h4 {
+  margin: 1.1em 0 0.45em;
+  line-height: 1.25;
+  font-weight: 650;
+}
+#answer h1 { font-size: 17px; letter-spacing: -0.01em; }
+#answer h2 { font-size: 15px; letter-spacing: -0.005em; }
+#answer h3, #answer h4 { font-size: 14px; }
+/* The opening paragraph is what to say: it leads, before any heading takes the eye. */
+#answer > :first-child > p:first-child {
+  font-size: 15px;
+  font-weight: 520;
+  line-height: 1.45;
+  color: #fff;
+}
+/* Labels inside it ("Situation :") still stand out from the sentence. */
+#answer > :first-child > p:first-child strong { font-weight: 720; }
+#answer strong { font-weight: 650; color: #fff; }
+#answer ul, #answer ol { margin: 0 0 0.7em; padding-left: 1.3em; }
+#answer li { margin: 0.15em 0; }
+#answer li::marker { color: var(--text-tertiary); }
+#answer a { color: var(--accent); text-decoration: none; }
+#answer blockquote {
+  margin: 0 0 0.7em;
+  padding: 0 0 0 10px;
+  border-left: 2px solid var(--surface-strong);
+  color: var(--text-secondary);
+}
+#answer hr { border: 0; border-top: 1px solid var(--border); margin: 1em 0; }
+#answer table { border-collapse: collapse; margin: 0 0 0.8em; font-size: 12px; }
+#answer th, #answer td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
+#answer th { background: var(--surface); font-weight: 600; }
+
+#answer :not(pre) > code {
+  font: 0.92em/1 ui-monospace, "SF Mono", Menlo, monospace;
+  background: var(--surface-strong);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+/* Code blocks */
+.code {
+  position: relative;
+  margin: 0 0 0.8em;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.code pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  tab-size: 4;
+}
+.code-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px 0 12px;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+.copy {
+  font: inherit;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  padding: 2px 6px;
+  cursor: default;
+}
+.copy:active { background: var(--surface-strong); color: var(--text); }
+.copy.done { color: var(--accent); }
+
+.answer-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+/* `display: flex` would beat the `hidden` attribute: the button only shows once the answer is complete. */
+.answer-tools[hidden] { display: none; }
+
+/* No drag image (a system window, seen in a screen share). */
+* { -webkit-user-drag: none; }
+
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-selector-tag { color: var(--syn-keyword); }
+.hljs-string, .hljs-regexp, .hljs-char, .hljs-template-string { color: var(--syn-string); }
+.hljs-number, .hljs-symbol { color: var(--syn-number); }
+.hljs-comment, .hljs-quote, .hljs-doctag { color: var(--syn-comment); font-style: italic; }
+.hljs-type, .hljs-class .hljs-title, .hljs-title.class_ { color: var(--syn-type); }
+.hljs-title, .hljs-title.function_, .hljs-section { color: var(--syn-function); }
+.hljs-attr, .hljs-attribute, .hljs-meta, .hljs-property { color: var(--syn-attr); }
+.hljs-variable, .hljs-params, .hljs-subst { color: var(--syn-variable); }
+.hljs-addition { color: #7ee787; }
+.hljs-deletion { color: var(--danger); }
+
+/* Diagrams */
+.diagram {
+  margin: 0 0 0.8em;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  overflow-x: auto;
+  text-align: center;
+}
+.diagram svg { display: inline-block; }
+.diagram.pending {
+  text-align: left;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.diagram.pending::before {
+  content: "";
+  display: inline-block;
+  width: 6px; height: 6px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 1px;
+  /* Still, never pulsing: nothing moves during a meeting without new information. */
+  opacity: 0.7;
+}
+.diagram-note { color: var(--text-tertiary); font-size: 11px; margin: -0.4em 0 0.8em; }
+
+/* Status line under the answer (stop reason, error). */
+.notice {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.notice.error { color: var(--danger); border-color: rgba(255, 138, 128, 0.25); }
+.notice .retry { color: var(--text); font-weight: 600; }
+.notice.warning { color: var(--warning); border-color: rgba(242, 196, 109, 0.22); }
+
+/* New answer: settle in place, no slide. */
+#answer.entering { animation: settle 160ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes settle { from { opacity: 0; transform: translateY(3px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  #answer.entering { animation: none; }
+}
+@media (prefers-contrast: more) {
+  :root {
+    --border: rgba(255, 255, 255, 0.28);
+    --text-secondary: rgba(255, 255, 255, 0.78);
+    --text-tertiary: rgba(255, 255, 255, 0.66);
+  }
+}
+
+/* Diagram zoom (click a diagram): a sheet over the answer, scrolling sideways when wide. */
+.diagram:not(.pending) { cursor: zoom-in; }
+.zoom {
+  position: fixed; inset: 0; z-index: 10;
+  background: rgba(12, 12, 16, 0); overflow: auto; cursor: zoom-out;
+  transition: background 200ms ease-out;
+  padding: 16px;
+}
+.zoom.open { background: rgba(12, 12, 16, 0.92); }
+.zoom-sheet { display: inline-block; background: var(--surface, #1c1c22); border-radius: 10px; padding: 12px; }
+.zoom-hint { color: var(--text-tertiary); font-size: 11px; margin: 8px 2px 0; }
+@media (prefers-reduced-motion: reduce) {
+  .zoom { transition: background 120ms ease-out; }
+}
+
+/* Math (KaTeX): display formulas scroll sideways instead of overflowing the panel. */
+.math {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 8px 0;
+  padding: 2px 0;
+}
+
+.katex {
+  font-size: 1.1em;
+}
