@@ -30,9 +30,6 @@ final class AssistController: ObservableObject {
     private var extractsTask: Task<Void, Never>?
     private var subscriptions: Set<AnyCancellable> = []
 
-    /// Phrases offered as context: the last minute and a half.
-    static let window: TimeInterval = 90
-
     init(settings: SettingsStore, session: SessionController, base: BaseController, overlay: OverlayController) {
         mode = settings.mode
         self.session = session
@@ -65,15 +62,17 @@ final class AssistController: ObservableObject {
         loadExtracts {}
     }
 
-    /// ⌥1-4, ⌘↩, a click on a case: Répondre on it, in its kind's format, with the context
+    /// ⌥1-4, a click on a case: Répondre on it, in its kind's format, with the context
     /// switches applied; nothing new if its answer (drafted by itself) is already on screen.
     func answer(_ topic: Topic) {
+        extractsTask?.cancel()
         target = topic
         if session.showCachedAnswer(for: topic) {
             overlay.reveal()
             return
         }
-        loadExtracts { [weak self] in self?.run(.answer) }
+        session.prepareFreshAnswer()
+        loadExtracts { [weak self] in self?.runSelected(.answer) }
     }
 
     /// Lines, captures and base extracts as of now; the user's switches are kept.
@@ -91,6 +90,32 @@ final class AssistController: ObservableObject {
     }
 
     func run(_ action: AssistAction) {
+        if action == .answer { answerNow() } else { runSelected(action) }
+    }
+
+    /// Shared by Answer and its existing keyboard shortcut; a fresh lookup for frozen speech.
+    func answerNow() {
+        extractsTask?.cancel()
+        session.prepareFreshAnswer()
+        refresh()
+        let frozenContext = context
+        let lines = listening?.transcript.lines ?? []
+        let interim = listening?.recentProvisionalSpeech() ?? []
+        target = nil
+        overlay.reveal()
+        guard let snapshot = LiveAnswerSnapshot(lines: lines, context: frozenContext, provisional: interim) else {
+            session.noSpeechToAnswer()
+            return
+        }
+        var question = AssistQuestion(action: .answer, mode: mode, question: snapshot.focusText, heard: [],
+                                      context: frozenContext, format: AnswerFormat(question: snapshot.focusText))
+        question.liveSnapshot = snapshot
+        let heard = snapshot.latestLines.map(\.text) + snapshot.provisional.map(\.text)
+        let plan = base.snapshotPlan(heard: heard, conversation: snapshot.recentLines)
+        session.assist(question, label: "Answer · latest speech", topic: nil, plan: plan)
+    }
+
+    private func runSelected(_ action: AssistAction) {
         refresh()
         let question = AssistQuestion(
             action: action, mode: mode, question: target?.title, heard: target?.excerpt ?? [], context: context, format: format

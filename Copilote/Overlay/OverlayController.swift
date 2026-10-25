@@ -254,7 +254,9 @@ final class OverlayController {
         if model.machine.presentation != .hidden { handle(.toggleVisibility) }
     }
 
+    /// Shared by the arrow and the visible-only panel shortcut. A queued key must never reveal.
     func pillClicked() {
+        guard model.machine.presentation != .hidden else { return }
         handle(.pillClicked)
     }
 

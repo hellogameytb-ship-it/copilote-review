@@ -57,6 +57,18 @@ public struct AssistContext: Equatable, Sendable {
         self.items = items
     }
 
+    /// Replace only retrieved extracts; keep click-time switches for every other item.
+    public mutating func replaceExtracts(with fresh: [BaseSnippet]) {
+        let excluded = Set(items.filter { !$0.isIncluded }.map(\.id))
+        items.removeAll { $0.kind == .extract }
+        extracts = [:]
+        for extract in fresh {
+            let id = "extract-\(extract.source)"
+            extracts[id] = extract
+            items.append(ContextItem(id: id, kind: .extract, label: extract.source, isIncluded: !excluded.contains(id)))
+        }
+    }
+
     public mutating func toggle(_ id: String) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         items[index].isIncluded.toggle()

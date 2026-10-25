@@ -46,7 +46,7 @@ final class SessionController: ObservableObject {
     let stickyNotes: StickyNotesController
     private let settings: SettingsStore
     private let overlay: OverlayController
-    private let capturer: ScreenCapturer
+    private let capturer: any ScreenCapturing
     private let regionSelector = RegionSelector()
     private let providers: ProviderController
 
@@ -62,6 +62,7 @@ final class SessionController: ObservableObject {
     private var notesByRequest: [Int: Set<UUID>] = [:]
     /// The answer in the overlay.
     private var shown: AnswerRequest?
+    private var keepsManualFocus = false
     private var renderScheduled = false
 
     /// One call to the model. Its turn joins the conversation only once it is shown and complete.
@@ -75,7 +76,7 @@ final class SessionController: ObservableObject {
 
         let id: Int
         var profileScope = "normal"
-        let input: UserInput
+        var input: UserInput
         let label: String
         /// Captures to put back on the stack if the request fails.
         let restoring: [CapturedImage]
@@ -109,7 +110,7 @@ final class SessionController: ObservableObject {
         }
     }
 
-    init(settings: SettingsStore, overlay: OverlayController, capturer: ScreenCapturer, providers: ProviderController) {
+    init(settings: SettingsStore, overlay: OverlayController, capturer: any ScreenCapturing, providers: ProviderController) {
         self.settings = settings
         stickyNotes = StickyNotesController(settings: settings)
         self.providers = providers
@@ -229,7 +230,21 @@ final class SessionController: ObservableObject {
 
     /// Répondre / Que dire / Notes / Demander. Included captures leave the stack with the request
     /// (and come back if it fails); switched-off ones stay on it.
-    func assist(_ question: AssistQuestion, label: String, topic: Topic?) {
+    /// Cancelling first restores pending captures before the new click snapshot is taken.
+    func prepareFreshAnswer() {
+        keepsManualFocus = true
+        cancelCurrent()
+    }
+
+    func noSpeechToAnswer() {
+        prepareFreshAnswer()
+        shown = nil; answeringTopicID = nil; isAnswering = false; isShowingAutomatic = false
+        answerPhase = .none; lastFinished = nil
+        overlay.resetAnswer()
+        overlay.setStatus("No speech to answer yet · start a session or use Ask", tone: .idle)
+    }
+
+    func assist(_ question: AssistQuestion, label: String, topic: Topic?, plan: (@MainActor () async -> AnswerPlan)? = nil) {
         if question.typed, isBusy {
             cancelCurrent()
         }
@@ -240,7 +255,7 @@ final class SessionController: ObservableObject {
             _ = stack.restore(all.filter { !included.contains($0) })
             overlay.setCounter(stack.summary)
         }
-        send(.assist(question), label: label, restoring: included, topic: topic)
+        send(.assist(question), label: label, restoring: included, topic: topic, plan: plan)
     }
 
     /// "Rédiger une réponse" on a fiche: the question heard, answered from the fiche's extracts.
@@ -269,7 +284,7 @@ final class SessionController: ObservableObject {
             }
             requests.removeValue(forKey: old.id)
         }
-        let keepSelection = shown != nil
+        let keepSelection = shown != nil || keepsManualFocus
         if shown?.topic?.id == topic.id { updatedTopicIDs.insert(topic.id) }
         let request = start(.assist(question), label: label, restoring: [], topic: TopicVersion(topic), isAutomatic: true, provider: provider)
         cardAnswers[topic.id] = "Preparing…"
@@ -283,6 +298,8 @@ final class SessionController: ObservableObject {
     /// Switching cards restores its request immediately; it does not start another paid call.
     func showCachedAnswer(for topic: Topic) -> Bool {
         guard stack.isEmpty, let cached = requests.values.filter({ $0.topic == TopicVersion(topic) && $0.failure == nil && $0.profileScope == settings.interviewScope }).max(by: { $0.id < $1.id }) else { return false }
+        if shown !== cached { cancelCurrent() }
+        keepsManualFocus = true
         show(cached)
         return true
     }
@@ -328,7 +345,7 @@ final class SessionController: ObservableObject {
         overlay.setStatus("Answer in progress · \(ShortcutCatalog.keys(for: .clearContext)) to cancel", tone: .working)
     }
 
-    private func send(_ input: UserInput, label: String, restoring images: [CapturedImage], topic: Topic? = nil) {
+    private func send(_ input: UserInput, label: String, restoring images: [CapturedImage], topic: Topic? = nil, plan: (@MainActor () async -> AnswerPlan)? = nil) {
         guard !isBusy else {
             restore(images)
             return reportBusy()
@@ -339,13 +356,13 @@ final class SessionController: ObservableObject {
             overlay.reveal()
             return
         }
-        show(start(input, label: label, restoring: images, topic: topic.map(TopicVersion.init), isAutomatic: false, provider: provider))
+        show(start(input, label: label, restoring: images, topic: topic.map(TopicVersion.init), isAutomatic: false, provider: provider, plan: plan))
     }
 
     /// Starts streaming; the request is rendered only while it is the shown one.
     private func start(
         _ input: UserInput, label: String, restoring: [CapturedImage], topic: TopicVersion?, isAutomatic: Bool,
-        provider: any LLMProvider
+        provider: any LLMProvider, plan: (@MainActor () async -> AnswerPlan)? = nil
     ) -> AnswerRequest {
         nextRequestID += 1
         let request = AnswerRequest(
@@ -371,8 +388,15 @@ final class SessionController: ObservableObject {
         let requestID = request.id
         request.task = Task { [weak self] in
             do {
+                try Task.checkCancellation()
                 var prepared = input
                 if case var .assist(question) = prepared {
+                    if let plan {
+                        let fresh = await plan()
+                        try Task.checkCancellation()
+                        question.context.replaceExtracts(with: fresh.extracts)
+                        question.format = fresh.format
+                    }
                     question.earlierAnswers = earlier
                     question.priorTypedRequests = priorTyped
                     question.personalNotes = personalNotes
@@ -385,6 +409,7 @@ final class SessionController: ObservableObject {
                     prepared = .assist(question)
                 }
                 try Task.checkCancellation()
+                self?.request(requestID)?.input = prepared
                 draft.appendUser(prepared)
                 let completed = try await provider.streamAnswer(to: draft) { [weak self] text in
                     await self?.receive(text, requestID: requestID)
@@ -533,6 +558,7 @@ final class SessionController: ObservableObject {
     // MARK: ⌘⇧X
 
     func clear() {
+        keepsManualFocus = false
         contextStartRequestID = nextRequestID + 1
         typedRequests = []
         notesByRequest = [:]

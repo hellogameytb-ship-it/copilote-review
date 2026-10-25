@@ -205,6 +205,12 @@ final class BaseController: ObservableObject {
         await AnswerPlan.make(heard: topic.excerpt.isEmpty ? [topic.title] : topic.excerpt, base: router.mode == .off ? nil : personal, conversation: conversation)
     }
 
+    /// Freeze the selected base before asynchronous lookup starts.
+    func snapshotPlan(heard: [String], conversation: [TranscriptLine]) -> @MainActor () async -> AnswerPlan {
+        let selected = router.mode == .off ? nil : personal
+        return { await AnswerPlan.make(heard: heard, base: selected, conversation: conversation) }
+    }
+
     /// « Afficher » on a suggestion: the fiche opens, even over an answer being read.
     func expand() {
         displayed?.action = .show

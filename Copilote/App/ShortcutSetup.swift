@@ -30,7 +30,13 @@ enum ShortcutSetup {
             let stored = storedState(of: name)
             let key = "defaultShortcut-" + shortcut.name
             let lastDefault = lastDefault(store, key)
-            if let new = ShortcutDefaults.update(stored: stored, lastDefault: lastDefault, legacy: ShortcutDefaults.legacy(shortcut), current: current) {
+            // Introducing panel folding must not compete with a user's existing binding.
+            // A collision leaves it unassigned until the user chooses a key in settings.
+            let occupied: Set<KeyCombo> = shortcut.name == "togglePanel" ? Set(ShortcutCatalog.all.compactMap { entry in
+                guard entry.name != name, case let .set(combo) = storedState(of: entry.name) else { return nil }
+                return combo
+            }) : []
+            if let new = ShortcutDefaults.update(stored: stored, lastDefault: lastDefault, legacy: ShortcutDefaults.legacy(shortcut), current: current, occupied: occupied) {
                 install(new, for: shortcut)
             } else if stored == .set(current) {
                 store.set(try? JSONEncoder().encode(current), forKey: key)

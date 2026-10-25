@@ -1,6 +1,6 @@
 # Copilote — source review snapshot
 
-Native macOS conversation assistance in Swift, SwiftUI and AppKit. This sanitized snapshot corresponds to the build 15 source plus isolated capture experiments, replacing the older review snapshot. See [AGENT_HANDOFF.md](AGENT_HANDOFF.md) for changes, architecture, validation and remaining limits.
+Native macOS conversation assistance in Swift, SwiftUI and AppKit. This sanitized snapshot corresponds to the build 18 source plus isolated capture experiments, replacing the older review snapshot. See [AGENT_HANDOFF.md](AGENT_HANDOFF.md) for changes, architecture, validation and remaining limits.
 
 This repository has its own history and pseudonymous commit identity. It excludes personal documents, knowledge vaults, interview context, notes, credentials, recordings, screenshots, signing identity, private reports and original Git history. Profiles contain generic instructions; provide your own synthetic context for review.
 

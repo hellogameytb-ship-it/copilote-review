@@ -173,6 +173,7 @@ struct ActionBar: View {
     let total: Int
     var isContextOpen = false
     var onAction: (AssistAction) -> Void = { _ in }
+    var answerKeys = "⌘↩"
     var onClearTarget: () -> Void = {}
     var onContext: () -> Void = {}
 
@@ -211,11 +212,13 @@ struct ActionBar: View {
     private func actions(_ choices: [AssistAction]) -> some View {
         HStack(spacing: 6) {
             ForEach(choices, id: \.self) { action in
-                Button { onAction(action) } label: {
+                let perform = { onAction(action) }
+                Button(action: perform) {
                     Text(shortName(action)).font(.system(size: 11.5, weight: .semibold))
                 }
                 .buttonStyle(PillButtonStyle(prominent: false))
-                .overlayHint(Copy.Panel.actionHint(action))
+                .overlayHint(action == .answer ? "Answer what was just said (\(answerKeys))" : Copy.Panel.actionHint(action))
+                .background(InlineControlBounds(id: action == .answer ? "AnswerNow" : "AssistAction", action: perform))
                 .fixedSize()
             }
             Spacer(minLength: 0)

@@ -4,6 +4,7 @@ import KeyboardShortcuts
 /// launch by `ShortcutSetup` (ShortcutDefaults in the Kit); all are editable in the main window.
 extension KeyboardShortcuts.Name {
     static let toggleOverlay = Self("toggleOverlay")
+    static let togglePanel = Self("togglePanel")
     /// The stealth mode (its name kept from the first « mode caché »: renaming would reset it).
     static let captureScreen = Self("captureScreen")
     static let captureRegion = Self("captureRegion")
@@ -43,7 +44,7 @@ extension ShortcutLabels {
             toggleOverlay: ShortcutCatalog.keys(for: .toggleOverlay), captureScreen: ShortcutCatalog.keys(for: .captureScreen),
             sendCaptures: ShortcutCatalog.keys(for: .sendCaptures), toggleListening: ShortcutCatalog.keys(for: .toggleListening),
             answerLatestTopic: ShortcutCatalog.keys(for: .answerLatestTopic), meetingNotes: ShortcutCatalog.keys(for: .meetingNotes),
-            ask: ShortcutCatalog.keys(for: .ask)
+            ask: ShortcutCatalog.keys(for: .ask), togglePanel: ShortcutCatalog.keys(for: .togglePanel)
         )
     }
 }
@@ -52,6 +53,7 @@ enum ShortcutCatalog {
     /// Order and English labels shown in settings.
     static let all: [(name: KeyboardShortcuts.Name, label: String)] = [
         (.toggleOverlay, "Show / hide overlay"),
+        (.togglePanel, "Expand/collapse panel"),
         (.captureScreen, "Capture screen"),
         (.captureRegion, "Add screen region"),
         (.ask, "Ask a typed question"),
@@ -69,7 +71,7 @@ enum ShortcutCatalog {
         (.meetingNotes, "Session notes"),
         (.toggleClickThrough, "Click through overlay"),
         (.toggleListening, "Start / end session"),
-        (.answerLatestTopic, "Open latest subject answer"),
+        (.answerLatestTopic, "Answer latest speech"),
         (.answerTopic1, "Open subject 1"),
         (.answerTopic2, "Open subject 2"),
         (.answerTopic3, "Open subject 3"),
@@ -91,8 +93,8 @@ enum ShortcutCatalog {
     /// text everywhere else.
     static let panelOnly: [KeyboardShortcuts.Name] = [.scrollUp, .scrollDown, .textBigger, .textSmaller]
 
-    /// Ask is available while visible. Movement has its own editor-aware registration.
-    static let visibleOnly: [KeyboardShortcuts.Name] = [.ask]
+    /// Ask and panel folding are available while visible. Movement has its own editor-aware registration.
+    static let visibleOnly: [KeyboardShortcuts.Name] = [.ask, .togglePanel]
 
     /// Shown in the overlay's empty state.
     static let emptyStateHints: [(name: KeyboardShortcuts.Name, label: String)] = [

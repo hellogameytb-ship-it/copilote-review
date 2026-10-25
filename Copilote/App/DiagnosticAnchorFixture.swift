@@ -11,7 +11,7 @@ enum DiagnosticAnchorFixture {
     }
 
     static func run(folder: URL, overlay: OverlayController, settings: SettingsStore,
-                    assist: AssistController, session: SessionController, menu: PillMenuController,
+                    assist: AssistController, session: SessionController, listening: ListeningController, menu: PillMenuController,
                     mainWindow: MainWindowController, record: (String, Bool) -> Void) async {
         guard isRequested, let screen = NSScreen.main,
               let pill = NSApp.windows.first(where: { $0.windowNumber == overlay.windowNumbers[0] }),
@@ -50,6 +50,7 @@ enum DiagnosticAnchorFixture {
         let otherEditor = NSTextView(frame:NSRect(x:0,y:0,width:200,height:100))
         focusFixture.contentView = otherEditor
         defer { focusFixture.orderOut(nil) }
+        await DiagnosticPanelShortcut.run(folder:folder, overlay:overlay, settings:settings, listening:listening, assist:assist, session:session, record:record)
         for stealth in [true, false] {
             settings.requestStealth(stealth, from: .settings); if let request = settings.pendingStealthOff { settings.confirmStealthOff(request.id) }
             WindowPrivacy.authorizeFromUserGesture(); overlay.present()

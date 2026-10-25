@@ -130,7 +130,7 @@ struct PillView: View {
                     .rotationEffect(.degrees(state.isUnfolded ? 180 : 0))
             }
             .buttonStyle(PillButtonStyle(compact: true))
-            .overlayHint(state.isUnfolded ? Copy.Pill.fold : "\(Copy.Pill.unfold) (\(state.labels.answerLatestTopic))")
+            .overlayHint("\(state.isUnfolded ? Copy.Pill.fold : Copy.Pill.unfold) (\(state.labels.togglePanel))")
             .accessibilityLabel(state.isUnfolded ? Copy.Pill.fold : Copy.Pill.unfold)
             .accessibilityIdentifier("PillFold")
             .background(InlineControlBounds(id:"PillFold",action:onUnfold))

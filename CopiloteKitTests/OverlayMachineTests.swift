@@ -59,6 +59,32 @@ final class OverlayMachineTests: XCTestCase {
         XCTAssertEqual(machine.presentation, .pill)
     }
 
+    func test_repeatedPanelToggleNeverAnswersOrTakesKeyboard() {
+        var machine = OverlayMachine()
+        for _ in 0..<20 {
+            XCTAssertEqual(machine.handle(.pillClicked), [])
+            XCTAssertEqual(machine.presentation, .panel)
+            XCTAssertEqual(machine.handle(.pillClicked), [])
+            XCTAssertEqual(machine.presentation, .pill)
+            XCTAssertFalse(machine.isTyping)
+        }
+    }
+
+    func test_panelToggleWhileHiddenIsNoOpAndPreservesRevealState() {
+        for expanded in [false, true] {
+            var machine = OverlayMachine()
+            if expanded { machine.handle(.pillClicked) }
+            machine.handle(.toggleVisibility)
+            let hidden = machine
+            for _ in 0..<5 {
+                XCTAssertEqual(machine.handle(.pillClicked), [])
+                XCTAssertEqual(machine, hidden)
+            }
+            machine.handle(.toggleVisibility)
+            XCTAssertEqual(machine.presentation, expanded ? .panel : .pill)
+        }
+    }
+
     /// An answer started from elsewhere (⌥1, ⌘⇧↩) needs the panel to be seen.
     func test_anAnswerUnfoldsThePill_butNotAHiddenOverlay() {
         var machine = OverlayMachine()

@@ -67,7 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         listening.$state.sink { [overlay] state in
             if case let .failed(message) = state { overlay.setStatus(message, tone: .failed) }
         }.store(in: &subscriptions)
-        overlay.onAnswerLatestTopic = { [weak self] in self?.listening.answer(caseIndex: 0) }
+        overlay.onAnswerLatestTopic = { [weak self] in self?.assist.answerNow() }
         overlay.attach(
             panelBody: OverlayBody(
                 settings: settings, listening: listening, session: session, base: base, assist: assist, notes: notes, overlay: overlay.model,
@@ -218,16 +218,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (.scrollUp, { [overlay] in overlay.scroll(-1) }),
             (.scrollDown, { [overlay] in overlay.scroll(1) }),
             (.ask, { [overlay] in overlay.startTyping() }),
+            (.togglePanel, { [overlay] in overlay.pillClicked() }),
             (.textBigger, { [overlay] in overlay.changeTextSize(by: 1) }),
             (.textSmaller, { [overlay] in overlay.changeTextSize(by: -1) }),
             (.meetingNotes, { [weak self] in self?.notesNow() }),
             (.toggleClickThrough, { [overlay] in overlay.toggleClickThrough() }),
             (.toggleListening, { [weak self] in self?.overlay.present(); self?.listening.toggle() }),
-            // Unfolds the pill, and answers case 1 if there is one.
-            (.answerLatestTopic, { [weak self] in
-                guard let self else { return }
-                overlay.assist(hasTopic: !listening.topics.isEmpty)
-            }),
+            // Same fresh speech snapshot as the Answer button, independent of topic cards.
+            (.answerLatestTopic, { [weak self] in self?.assist.answerNow() }),
         ]
         let caseActions: [(KeyboardShortcuts.Name, () -> Void)] = (0..<4).flatMap { index in
             [

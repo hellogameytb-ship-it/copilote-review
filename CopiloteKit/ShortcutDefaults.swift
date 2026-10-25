@@ -67,6 +67,7 @@ public enum ShortcutDefaults {
         // ⌥⌘O, O for overlay: free in macOS and the usual launchers (Spotlight ⌘Space, ChatGPT,
         // Raycast and Alfred ⌥Space, 1Password ⇧⌘Space).
         Default(name: "toggleOverlay", key: .character("o"), modifiers: [.command, .option]),
+        Default(name: "togglePanel", key: .character("p"), modifiers: [.command, .option]),
         Default(name: "captureScreen", key: .character("s"), modifiers: [.command, .shift]),
         Default(name: "captureRegion", key: .character("a"), modifiers: [.command, .shift]),
         Default(name: "sendCaptures", key: .physical(36), modifiers: [.command, .shift]),
@@ -124,6 +125,7 @@ public enum ShortcutDefaults {
             return [KeyCombo(keyCode: keyCode, modifiers: [.control, .command])]
         }
         switch shortcut.name {
+        case "togglePanel": return [] // Added later: no historical binding to migrate.
         case "toggleOverlay": return [KeyCombo(keyCode: 42, modifiers: [.command])]
         case "toggleClickThrough": return [KeyCombo(keyCode: 42, modifiers: [.command, .option])]
         default:
@@ -142,7 +144,8 @@ public enum ShortcutDefaults {
     /// What to set now, or nil to leave the user's shortcut alone: the current default where the
     /// user never chose (a new install, an old default, the default of another layout). A removed
     /// shortcut stays removed.
-    public static func update(stored: Stored, lastDefault: KeyCombo?, legacy: [KeyCombo], current: KeyCombo) -> KeyCombo? {
+    public static func update(stored: Stored, lastDefault: KeyCombo?, legacy: [KeyCombo], current: KeyCombo, occupied: Set<KeyCombo> = []) -> KeyCombo? {
+        guard !occupied.contains(current) else { return nil }
         switch stored {
         case .never:
             return lastDefault == nil ? current : nil

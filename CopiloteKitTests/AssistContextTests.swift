@@ -40,6 +40,20 @@ final class AssistContextTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(context.items.last).isIncluded)
     }
 
+    func test_freshLookupReplacesOldTopicAndPreservesClickTimeExclusions() throws {
+        let old = BaseSnippet(source: "old-project", text: "OLD_TOPIC")
+        let excluded = BaseSnippet(source: "private", text: "EXCLUDED")
+        let fresh = BaseSnippet(source: "new-project", text: "NEW_TOPIC")
+        var context = AssistContext(lines: lines, captures: [.fake("slide")], extracts: [old, excluded])
+        for item in context.items where item.kind != .extract || item.id == "extract-private" { context.toggle(item.id) }
+        let before = context.items.filter { $0.kind != .extract }
+        context.replaceExtracts(with: [fresh, excluded])
+        XCTAssertEqual(context.includedExtracts, [fresh])
+        XCTAssertEqual(context.items.filter { $0.kind != .extract }, before)
+        context.replaceExtracts(with: [])
+        XCTAssertTrue(context.includedExtracts.isEmpty)
+    }
+
     func test_labelsSayWhoSpokeAndWhatEachPieceIs() {
         let context = AssistContext(lines: Array(lines.prefix(2)), captures: [.fake("a"), .fake("b")], extracts: [])
 

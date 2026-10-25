@@ -78,6 +78,33 @@ final class ShortcutDefaultsTests: XCTestCase {
         XCTAssertEqual(toggle, KeyCombo(keyCode: 31, modifiers: [.command, .option]))
     }
 
+    func test_panelToggleUsesOptionCommandPWithoutCatalogCollisionsInBothLayouts() {
+        for layout in [azerty, qwerty] {
+            let panel = ShortcutDefaults.combo(ShortcutDefaults.named("togglePanel"), in: layout)
+            XCTAssertEqual(panel, KeyCombo(keyCode: 35, modifiers: [.command, .option]))
+            let combos = ShortcutDefaults.all.map { ShortcutDefaults.combo($0, in: layout) }
+            XCTAssertEqual(Set(combos).count, combos.count)
+            XCTAssertEqual(Set(ShortcutDefaults.all.map(\.name)).count, combos.count)
+            XCTAssertNotEqual(panel, ShortcutDefaults.combo(ShortcutDefaults.named("toggleOverlay"), in: layout))
+        }
+    }
+
+    func test_newPanelDefaultYieldsToExistingBindingsAndPreservesCustomOrRemovedChoice() {
+        let shortcut = ShortcutDefaults.named("togglePanel")
+        let panel = ShortcutDefaults.combo(shortcut, in: azerty)
+        let custom = KeyCombo(keyCode: 3, modifiers: [.control, .option])
+        XCTAssertTrue(ShortcutDefaults.legacy(shortcut).isEmpty)
+        XCTAssertEqual(ShortcutDefaults.update(stored: .never, lastDefault: nil, legacy: [], current: panel), panel)
+        XCTAssertNil(ShortcutDefaults.update(stored: .never, lastDefault: nil, legacy: [], current: panel, occupied: [panel]))
+        XCTAssertNil(ShortcutDefaults.update(stored: .set(custom), lastDefault: nil, legacy: [], current: panel))
+        XCTAssertNil(ShortcutDefaults.update(stored: .removed, lastDefault: nil, legacy: [], current: panel))
+        XCTAssertNil(ShortcutDefaults.update(stored: .removed, lastDefault: panel, legacy: [], current: panel))
+        XCTAssertNil(ShortcutDefaults.update(stored: .set(custom), lastDefault: custom, legacy: [], current: panel, occupied: [panel]))
+        // A key mapped to P on another layout is also resolved by character.
+        let relocated = FakeLayout([35: "x", 42: "p"])
+        XCTAssertEqual(ShortcutDefaults.combo(shortcut, in: relocated).keyCode, 42)
+    }
+
     /// An install made before keeps what the user chose; the old defaults (⌘\) give way.
     func test_theOldDefaultsGiveWay_theUsersChoicesStay() {
         let new = KeyCombo(keyCode: 31, modifiers: [.command, .option])

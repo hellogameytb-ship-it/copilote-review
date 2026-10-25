@@ -19,9 +19,15 @@ enum CaptureError: LocalizedError {
     }
 }
 
+/// Capture source seam: diagnostics supply generated pixels; production uses ScreenCaptureKit.
+@MainActor
+protocol ScreenCapturing {
+    func capture(_ screen: NSScreen) async throws -> CGImage
+}
+
 /// Screenshots through ScreenCaptureKit, always without Copilote's own windows.
 @MainActor
-final class ScreenCapturer {
+final class ScreenCapturer: ScreenCapturing {
     /// Window numbers to leave out explicitly (the overlay), on top of every window this app owns.
     var excludedWindowNumbers: () -> [Int] = { [] }
 

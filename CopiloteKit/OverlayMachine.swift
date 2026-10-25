@@ -48,6 +48,7 @@ public struct OverlayMachine: Equatable, Sendable {
             }
             return effects
         case .pillClicked:
+            guard presentation != .hidden else { return [] }
             let effects = stopTyping()
             presentation = presentation == .panel ? .pill : .panel
             return effects

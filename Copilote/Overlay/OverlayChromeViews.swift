@@ -58,7 +58,7 @@ struct OverlayBody: View {
                 ActionBar(
                     target: assist.target?.title, included: assist.context.items.filter(\.isIncluded).count,
                     total: assist.context.items.count, isContextOpen: assist.isContextOpen,
-                    onAction: assist.run, onClearTarget: { assist.select(nil) }, onContext: { assist.isContextOpen.toggle() }
+                    onAction: assist.run, answerKeys: ShortcutCatalog.keys(for: .answerLatestTopic), onClearTarget: { assist.select(nil) }, onContext: { assist.isContextOpen.toggle() }
                 )
                 if assist.isContextOpen {
                     ScrollView {

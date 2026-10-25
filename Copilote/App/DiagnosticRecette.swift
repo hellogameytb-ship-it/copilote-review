@@ -50,7 +50,9 @@ enum DiagnosticRecette {
         let providers = ProviderController(settings: settings, injectedProvider: fake, observesEnvironment: false)
         let base = BaseController(settings: settings, providers: providers)
         let overlay = OverlayController(settings: settings)
-        let session = SessionController(settings: settings, overlay: overlay, capturer: ScreenCapturer(), providers: providers)
+        let fixtureCapturer = DiagnosticCaptureButton.Capturer()
+        let captureSource: any ScreenCapturing = DiagnosticAnchorFixture.isRequested ? fixtureCapturer : ScreenCapturer()
+        let session = SessionController(settings: settings, overlay: overlay, capturer: captureSource, providers: providers)
         let listening = ListeningController(settings: settings, providers: providers, base: base)
         StealthConfirmationController.observeSession(listening)
         SystemDialogs.observe(listening, defaults: settings.defaults)
@@ -93,8 +95,10 @@ enum DiagnosticRecette {
             @MainActor func fieldEditor() -> NSTextView? { NSApp.windows.first { $0.isVisible && $0.isKeyWindow && $0 is OverlayPanel }?.firstResponder as? NSTextView }
             await pause()
             if DiagnosticAnchorFixture.isRequested {
-                await DiagnosticAnchorFixture.run(folder: folder, overlay: overlay, settings: settings, assist: assist, session: session, menu: menu, mainWindow: mainWindow, record: record)
+                await DiagnosticCaptureButton.run(folder:folder,overlay:overlay,settings:settings,listening:listening,assist:assist,session:session,capturer:fixtureCapturer,provider:fake,record:record)
+                await DiagnosticAnchorFixture.run(folder: folder, overlay: overlay, settings: settings, assist: assist, session: session, listening: listening, menu: menu, mainWindow: mainWindow, record: record)
                 await DiagnosticStealthConfirmation.run(folder:folder,overlay:overlay,settings:settings,listening:listening,assist:assist,session:session,mainWindow:mainWindow,record:record)
+                await DiagnosticAnswerNow.run(folder:folder,overlay:overlay,settings:settings,listening:listening,assist:assist,session:session,provider:fake,record:record)
                 defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
             }
             if args.contains("-RecetteFileBrowserOnly") {
@@ -373,6 +377,8 @@ actor RecetteProvider: LLMProvider {
     func resetConversations() { conversations = [] }
     private var nextReply: String?
     func replyNext(_ text: String) { nextReply = text }
+    private var nonCooperative = false
+    func lateReplyNext(_ text: String) { nextReply = text; nonCooperative = true }
     private var delay = false
     func delayNext() { delay = true }
     private var live: (any LLMProvider)?
@@ -382,11 +388,13 @@ actor RecetteProvider: LLMProvider {
     func streamAnswer(to conversation: Conversation, onText: @escaping @Sendable (String) async -> Void) async throws -> CompletedMessage {
         conversations.append(conversation)
         let reply = nextReply; nextReply = nil
+        let late = nonCooperative; nonCooperative = false
         if shouldFail { shouldFail = false; throw NSError(domain: "recette", code: 1, userInfo: [NSLocalizedDescriptionKey: "Erreur fournisseur de recette"]) }
         if let live { return try await live.streamAnswer(to: conversation, onText: onText) }
         let milliseconds = delay ? 1000 : 80
         delay = false
-        try await Task.sleep(for: .milliseconds(milliseconds))
+        if late { _ = await Task.detached { try? await Task.sleep(for: .milliseconds(300)) }.value }
+        else { try await Task.sleep(for: .milliseconds(milliseconds)) }
         var text = "Controlled fixture answer.\n\n**Say:** A controlled example.\n\n## Likely follow-ups\n- Why? → For this test."
         let input = conversation.messages.flatMap { $0["content"]?.arrayValue ?? [] }.compactMap { $0["text"]?.stringValue }.joined()
         if input.contains("Personal notes explicitly included") { text += "\nPrivate Orion interview pitch from the included note." }

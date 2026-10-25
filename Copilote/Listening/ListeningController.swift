@@ -24,6 +24,15 @@ final class ListeningController: ObservableObject {
     @Published private(set) var topics: [Topic] = []
     @Published private(set) var transcript = TranscriptBuffer()
     @Published private(set) var volatile: [Speaker: String] = [:]
+    private var volatileUpdatedAt: [Speaker: TimeInterval] = [:]
+
+    /// Only fresh interim text can supplement an explicit Answer snapshot.
+    func recentProvisionalSpeech(at now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> [ProvisionalSpeech] {
+        volatileUpdatedAt.sorted { $0.value < $1.value }.compactMap { speaker, updated in
+            guard now - updated <= 12, let text = volatile[speaker], !text.isEmpty else { return nil }
+            return ProvisionalSpeech(speaker: speaker, text: text)
+        }
+    }
     @Published private(set) var speaking: Set<Speaker> = []
     /// Shown in the settings: which segmenter decided last and how fast.
     @Published private(set) var segmenterStatus = ""
@@ -127,7 +136,7 @@ final class ListeningController: ObservableObject {
             drafting.values.forEach { $0.cancel() }; drafting = [:]; pendingAnswers = [:]; preparationIDs = [:]
             answers?.cancelAutomatic()
             base.dismiss()
-            volatile = [:]
+            volatile = [:]; volatileUpdatedAt = [:]
             speaking = []
             pausedSince = Date()
             idle.pause(at: Self.uptime)
@@ -181,7 +190,7 @@ final class ListeningController: ObservableObject {
 
         topics = []
         transcript = TranscriptBuffer()
-        volatile = [:]
+        volatile = [:]; volatileUpdatedAt = [:]
         autoAnswers = AutoAnswerPolicy()
         drafting.values.forEach { $0.cancel() }; drafting = [:]; pendingAnswers = [:]; preparationIDs = [:]
         answers?.forgetTopics()
@@ -256,7 +265,7 @@ final class ListeningController: ObservableObject {
         systemAudio.onBuffer = nil
         let finishing = session
         session = nil
-        volatile = [:]
+        volatile = [:]; volatileUpdatedAt = [:]
         speaking = []
         await finishing?.finish(discardPending: true)
         state = .idle
@@ -274,7 +283,7 @@ final class ListeningController: ObservableObject {
     func beginRecetteConversation() {
         guard DiagnosticRecette.isRequested else { return }
         generation = UUID()
-        topics = []; transcript = TranscriptBuffer(); sessionLines = []
+        topics = []; transcript = TranscriptBuffer(); sessionLines = []; volatile = [:]; volatileUpdatedAt = [:]
         drafting.values.forEach { $0.cancel() }; drafting = [:]; pendingAnswers = [:]; preparationIDs = [:]
         autoAnswers = AutoAnswerPolicy(); answers?.forgetTopics()
         gate.isPaused = false; isPaused = false; speaking = []
@@ -304,7 +313,7 @@ final class ListeningController: ObservableObject {
         session = ListeningSession(transcribers: [(speaker, transcriber)], segmenter: nil, segmenterName: "lexical") { [weak self] event in
             DispatchQueue.main.async { MainActor.assumeIsolated { if self?.generation == run { self?.handle(event) } } }
         }
-        topics = []; transcript = TranscriptBuffer(); sessionLines = []
+        topics = []; transcript = TranscriptBuffer(); sessionLines = []; volatile = [:]; volatileUpdatedAt = [:]
         autoAnswers = AutoAnswerPolicy()
         gate.isPaused = false; isPaused = false
         startedAt = Self.uptime; startedDate = Date(); state = .listening
@@ -398,7 +407,9 @@ final class ListeningController: ObservableObject {
             else { speaking.remove(speaker); flushPendingAnswers() }
         case let .volatile(speaker, text):
             volatile[speaker] = text
+            volatileUpdatedAt[speaker] = text.isEmpty ? nil : Self.uptime
         case let .line(line, _, _):
+            volatile[line.speaker] = nil; volatileUpdatedAt[line.speaker] = nil
             idle.heard(at: Self.uptime)
             armIdleStop()
             transcript.append(line)

@@ -47,6 +47,24 @@ if confirmation_file.exists():
     summary['physicalClicksTested'] = confirmation['physicalClicksTested']
     summary['ownApplicationActivations'] += confirmation.get('ownApplicationActivations', 0)
     summary['spaceChangesObserved'] += confirmation.get('spaceChangesObserved', 0)
+panel_file = output / 'panel-shortcut.json'
+if panel_file.exists():
+    panel = json.loads(panel_file.read_text())
+    summary['panelShortcutGeometrySamples'] = len(panel['geometry'])
+    summary['maxPanelShortcutOriginDelta'] = max((row['maxOriginDelta'] for row in panel['geometry']), default=0)
+    summary['panelShortcutAnswerRequests'] = panel['answerRequests']
+capture_file = output / 'capture-button.json'
+if capture_file.exists():
+    capture = json.loads(capture_file.read_text())
+    summary['captureButtonLayouts'] = len(capture['layouts'])
+    summary['captureButtonGeometrySamples'] = len(capture['geometry'])
+    summary['maxCaptureButtonOriginDelta'] = max((row['maxOriginDelta'] for row in capture['geometry']), default=0)
+    summary['fixtureCaptureCalls'] = capture['captureCalls']
+answer_file = output / 'answer-now.json'
+if answer_file.exists():
+    answer = json.loads(answer_file.read_text())
+    summary['freshAnswerChecks'] = len(answer['checks'])
+    summary['freshAnswerFailures'] = [row['name'] for row in answer['checks'] if not row['passed']]
 (output / 'summary.json').write_text(json.dumps(summary, indent=2))
 print(json.dumps(summary, indent=2))
 assert not failures, 'Headless geometry regression failed'

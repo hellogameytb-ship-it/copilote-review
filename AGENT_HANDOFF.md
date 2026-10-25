@@ -1,3 +1,21 @@
+# Current update — build 18 installed and verified
+
+Answer and its existing shortcut now create a fresh response from speech frozen at the click, independently of selected cards and their cached answers. The last finalized phrases and recent provisional transcription are emphasized, with five minutes of preceding speech and cumulative included session context. Provisional text is labeled, expires, and is removed when finalized. No usable speech produces an inline message instead of replaying a card.
+
+Each request freezes profile, preferences, allowed notes, selected base, captures and transcript exclusions. A cancellable lookup retrieves relevant source excerpts and replaces the old extracts while preserving exclusions. A later click cancels the prior request; late callbacks cannot replace its response. Explicit card selection still permits cached navigation. This does not fix all automatic topic segmentation/latency issues.
+
+Also included: configurable Option-Command-P to expand/collapse the panel, and a 220-by-40 Capture screen button displaying the effective shortcut (default Shift-Command-S). Capture adds an image to the preview stack without automatically sending it to the model. Existing order/removal/cancellation behavior is retained.
+
+Validation of the private upstream binary: 327 framework tests; 1,176 native fixture checks, including 18 fresh-Answer checks. 613 geometry samples report no required-origin movement. Parent independently reviewed the code, native result files, binary hash and signature. SHA-256: c132898e14aed2291c70ca1b2cbd5d376b448fea140e989ab63b05c455b8226b.
+
+Scope: synthetic provider, synthetic transcript/base excerpts/images, no live model request, microphone capture, desktop capture, physical clicks or global keyboard events. Actual personal-base retrieval and a live call have not been validated in this lot. The sanitized export has not been independently built. Screen-sharing and cursor invisibility remain unverified; private capture SPI is not integrated.
+
+Agent guidance: preserve request snapshot/cancellation and exclusion invariants, do not restore implicit card/cache routing for Answer, and do not expose private notes or source data in commits. Build18 was installed after checking listening was stopped twice. The old build15 was backed up. Installed hash and signature were independently rechecked. Startup remained hidden without taking focus, with listening stopped; 13 notes and all existing preferences were preserved. No live audio or desktop capture was started.
+
+---
+
+Historical delivery notes follow; build18 source supersedes the older source descriptions.
+
 # Delivery — build 15 installed and checked
 
 Build 15 was installed after visible fixture validation. Exact binary SHA-256: bb91e216a1f3d6b423cb5573e15e583bd6069da1a3aaceed5be31f2a1061b71b. Signature and installed manifest were verified; build 13 was backed up outside the volatile build directory. No active session was interrupted.

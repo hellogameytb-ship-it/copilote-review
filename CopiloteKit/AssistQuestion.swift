@@ -113,11 +113,12 @@ public struct AssistQuestion: Equatable, Sendable {
     public let question: String?
     /// What the others said about the case.
     public let heard: [String]
-    public let context: AssistContext
+    public var context: AssistContext
     /// Typed by the user in "Demander".
     public let typed: Bool
     /// A case's kind of question: its own format (nil: the generic one).
-    public let format: AnswerFormat?
+    public var format: AnswerFormat?
+    public var liveSnapshot: LiveAnswerSnapshot? = nil
     public var earlierAnswers = ""
     public var priorTypedRequests: [String] = []
     public var personalNotes: [String] = []

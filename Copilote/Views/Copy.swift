@@ -11,6 +11,7 @@ struct ShortcutLabels: Equatable {
     var answerLatestTopic = "⌘↩"
     var meetingNotes = "⇧⌘N"
     var ask = "⌃⌘↩"
+    var togglePanel = "⌥⌘P"
 }
 
 /// Every label of step 4 in one place: the same word for the same thing everywhere, French,
@@ -60,7 +61,7 @@ enum Copy {
         static let say = "Say"
         static func actionHint(_ action: AssistAction) -> String {
             switch action {
-            case .answer: return "Refresh the selected answer using the full session context"
+            case .answer: return "Answer what was just said using the session context"
             case .whatToSay: return "A shorter ready-to-say version and likely follow-ups"
             case .questions: return "Suggest questions you could ask the interviewer"
             case .notes: return "Summarize the session so far"
