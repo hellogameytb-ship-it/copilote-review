@@ -27,7 +27,7 @@ struct MainView: View {
             VStack(spacing: 0) {
                 HistoryBrowser(
                     isRecording: history.isRecording, sessions: history.sessions, query: $history.query, selection: $history.selection,
-                    opened: history.opened, onExport: history.export, onDelete: history.delete
+                    opened: history.opened, onExport: { record in Task { await history.export(record) } }, onDelete: history.delete
                 )
                 if let notice = history.exportNotice {
                     Text(notice).font(.caption).foregroundStyle(.orange).padding(12)

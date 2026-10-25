@@ -19,7 +19,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>0.1.1</string>
 	<key>CFBundleVersion</key>
-	<string>12</string>
+	<string>13</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
@@ -31,6 +31,6 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Copilote transcribes your voice (Me channel) on your Mac during a session you start. Audio is not recorded.</string>
 	<key>NSPrincipalClass</key>
-	<string>NSApplication</string>
+	<string>CopiloteApplication</string>
 </dict>
 </plist>

@@ -10,13 +10,13 @@ struct BaseSection: View {
 
     var body: some View {
         Section("Brain") {
-            Text("Finder and macOS file dialogs may be visible in a screen share. Folder dialogs are unavailable during a listening session, including when paused; end the session and click again.").font(.caption).foregroundStyle(.secondary)
+            Text("Browse folders inside Copilote after ending the listening session, including a paused session. Open in Finder leaves Copilote and may be visible in a screen share.").font(.caption).foregroundStyle(.secondary)
             LabeledContent("Folder") {
                 HStack(spacing: 6) {
                     Text(abbreviated(settings.baseFolder)).lineLimit(1).truncationMode(.middle).foregroundStyle(.secondary)
                     Button("Open in Finder") { NSWorkspace.shared.open(base.root) }
-                    Button("Choose (macOS)…") {
-                        guard let folder = chooseFolder() else { return }
+                    Button("Choose folder…") { Task { @MainActor in
+                        guard let folder = await chooseFolder() else { return }
                         if let problem = BaseController.problem(withBaseFolder: folder) {
                             refused = problem
                         } else {
@@ -24,7 +24,7 @@ struct BaseSection: View {
                             settings.baseFolder = folder.path
                             base.foldersChanged()
                         }
-                    }
+                    } }
                 }
             }
             LabeledContent("Index") {
@@ -47,12 +47,12 @@ struct BaseSection: View {
                 HStack {
                     Text("Additional photo folders")
                     Spacer()
-                    Button("Add (macOS)…") {
-                        if let folder = chooseFolder(), !settings.basePhotoFolders.contains(folder.path) {
+                    Button("Add folder…") { Task { @MainActor in
+                        if let folder = await chooseFolder(), !settings.basePhotoFolders.contains(folder.path) {
                             settings.basePhotoFolders.append(folder.path)
                             base.foldersChanged()
                         }
-                    }
+                    } }
                 }
                 if settings.basePhotoFolders.isEmpty {
                     Text("Only the base’s photos/ folder is read by default. The Photos library is never scanned.")
@@ -103,8 +103,8 @@ struct BaseSection: View {
         (path as NSString).abbreviatingWithTildeInPath
     }
 
-    private func chooseFolder() -> URL? {
-        do { refused = nil; return try SystemDialogs.chooseFolder() }
+    private func chooseFolder() async -> URL? {
+        do { refused = nil; return try await SystemDialogs.chooseFolder() }
         catch { refused = error.localizedDescription; return nil }
     }
 }

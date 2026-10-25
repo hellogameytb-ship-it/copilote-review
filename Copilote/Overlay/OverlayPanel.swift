@@ -140,7 +140,7 @@ private final class QuietFieldEditor: NSTextView {
     override func menu(for event: NSEvent) -> NSMenu? { nil }
     override func quickLook(with event: NSEvent) {}
     override func complete(_ sender: Any?) {}
-    /// ⌃⌘Space reaches the first responder before NSApp; the Globe key's picker stays the system's.
+    /// Responder-chain fallback, in addition to the app/window-local event guard.
     @objc func orderFrontCharacterPalette(_ sender: Any?) {}
 }
 

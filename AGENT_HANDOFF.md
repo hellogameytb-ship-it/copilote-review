@@ -1,3 +1,30 @@
+# Current update — build 13 and isolated experiments
+
+Build 13 adds an app-owned ProtectedFileBrowser behind the asynchronous SystemDialogs seam. Native NSOpenPanel/NSSavePanel creation is removed. Folder selection, bookmarks, cancellation, Markdown export and inline overwrite confirmation are retained. Session/hidden guards apply throughout. This non-sandboxed browser does not grant Powerbox sandbox access. Export uses exclusive creation, rejects symlink targets and rechecks replacement metadata; replacement is not a transaction against malicious concurrent writers.
+
+Character-palette events delivered to protected app windows are consumed, without global interception. Physical Globe handling before delivery to the app remains unverified. The linter no longer exempts SystemDialogs or all diagnostics; two exact deliberate drift injections remain allowed.
+
+Upstream: 309 framework tests, browser 37/37 across three runs, guard 49/49, profile 20/20, presentation 28/28, UI 77/77 and launch 14/14 in each Stealth state. Independent review reran the linter and its 17 negative probes and verified candidate signature. Sanitized export itself has not been rebuilt.
+
+## Capture research — NOT production code
+
+Tools/Experiments/CaptureExcludeShape is outside app targets. Private SPI is not loaded by the app. Keep public sharingType policy in production. The harness tests a synthetic window only, using SCK desktopIndependentWindow with no PID/app filter. This does not establish full-display behavior.
+
+On the recorded macOS 27.0.1 / 26A434 environment: sharingType alone produced transparent samples; SPI alone produced opaque gray and resize leaks. Two combination-addendum runs measured 2,355 images: no pattern detected in 708 combination frames, with no established steady-state advantage over sharingType alone. SPI with final-only resize reapplication leaked in 30 motion frames; per-didResize reapplication had no sampled motion leak but one setup leak. Capture gaps reached 550 ms. Queued pre-policy frames and sampled spatial coverage prevent a no-transient-leak claim.
+
+| Method / OS | sharingType alone | SPI alone | Combined |
+| --- | --- | --- | --- |
+| SCK single-window / recorded 27.0.1 | Transparent in tested phases; queued pre-policy frames noted | Gray, transient leaks | Transparent, no detected pattern; no proven gain |
+| SCK whole display / recorded 27.0.1 | Not tested | Not tested | Not tested |
+| SCK / macOS 15.x or 26.x | Not tested | Not tested | Not tested |
+| Meet / Zoom / Teams receiver, all modes | Not tested | Not tested | Not tested |
+
+No receiver-side cursor exclusion, hardware lock/sleep, or physical monitor changes are established. Reproduce only in an authorized synthetic environment; no desktop capture fallback exists. Read the experiment README for protocol, sampling limitations and commands. Do not integrate SPI unless an actual public-mechanism failure is demonstrated and a separately reviewed experiment establishes a benefit.
+
+The earlier handoff below records build 12 history; its statement about OS file dialogs is superseded by this update.
+
+---
+
 # Agent handoff — build 12 source snapshot
 
 ## Scope and changes since the previous public snapshot

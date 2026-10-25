@@ -83,7 +83,7 @@ struct SessionDetail: View {
                         Button(Copy.History.delete, role: .destructive) { confirmsDelete = true }
                     }
                     .padding(.top, 2)
-                    Text("Export opens a macOS save dialog visible in a screen share. End any listening session first, including a paused session, then click Export again.").font(.caption).foregroundStyle(.secondary)
+                    Text("Export opens a file browser inside Copilote. End any listening session first, including a paused session, then click Export again.").font(.caption).foregroundStyle(.secondary)
                     if confirmsDelete {
                         Text(Copy.History.deleteMessage).font(.caption)
                         HStack {

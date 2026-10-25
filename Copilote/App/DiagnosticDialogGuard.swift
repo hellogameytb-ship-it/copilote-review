@@ -13,18 +13,18 @@ enum DiagnosticDialogGuard {
         let center = NSWorkspace.shared.notificationCenter
         let history = HistoryController(settings: settings, storeURL: folder.appendingPathComponent("unused-history.sqlite"))
         let entry = SessionRecord.ended(started: Date(), duration: 30, mode: .meeting, lines: [], topics: [], answers: [], keepTranscript: false)
-        func denied(_ label: String) {
+        func denied(_ label: String) async {
             let count = invocations
-            do { _ = try SystemDialogs.chooseFolder(); record(label + " folder refused", false) }
+            do { _ = try await SystemDialogs.chooseFolder(); record(label + " folder refused", false) }
             catch { record(label + " folder refused inline", error.localizedDescription.contains("session") || error.localizedDescription.contains("explicitly")) }
-            history.export(entry)
+            await history.export(entry)
             record(label + " export refused inline before native UI", history.exportNotice != nil && invocations == count)
         }
-        denied("hidden idle")
+        await denied("hidden idle")
         for iteration in 1...3 {
             _ = WindowPrivacy.authorizeFromUserGesture()
             listening.beginRecetteStartup()
-            denied("starting \(iteration)")
+            await denied("starting \(iteration)")
             listening.suspendForPrivacy()
             for _ in 0..<40 {
                 if listening.state == .idle { break }
@@ -33,13 +33,13 @@ enum DiagnosticDialogGuard {
             record("suspended startup returns to idle \(iteration)", listening.state == .idle)
             guard listening.state == .idle else { return }
             listening.beginRecetteConversation()
-            denied("listening \(iteration)")
+            await denied("listening \(iteration)")
             listening.pauseOrResume()
-            denied("paused \(iteration)")
+            await denied("paused \(iteration)")
             let before = invocations
             await listening.stop()
             record("ending a session never opens a deferred dialog \(iteration)", invocations == before)
-            do { _ = try SystemDialogs.chooseFolder(); history.export(entry) }
+            do { _ = try await SystemDialogs.chooseFolder(); await history.export(entry) }
             catch { record("idle explicit actions accepted \(iteration)", false) }
             record("idle explicit folder and export reach adapter \(iteration)", invocations == before + 2 && history.exportNotice == nil)
         }
@@ -56,7 +56,7 @@ enum DiagnosticDialogGuard {
             center.post(name: available, object: nil)
             record("\(name) return never shows or resumes automatically", WindowPrivacy.environmentAvailable && !WindowPrivacy.presentationAuthorized && listening.isPaused)
             await listening.stop()
-            denied("\(name) returned but not explicitly shown")
+            await denied("\(name) returned but not explicitly shown")
         }
         center.post(name: NSWorkspace.sessionDidResignActiveNotification, object: nil)
         center.post(name: NSWorkspace.screensDidSleepNotification, object: nil)

@@ -1,8 +1,18 @@
 import AppKit
 
-/// Every production app-owned surface uses this gate. OS dialogs are explicit exceptions.
+/// Every production app-owned surface, including file browsing, uses this gate.
 /// Reading sharingType confirms only local policy, never what a receiver captures.
 class ProtectedPanel: NSPanel {
+    override func sendEvent(_ event: NSEvent) {
+        if CharacterPaletteGuard.consume(event, window: self) { return }
+        super.sendEvent(event)
+    }
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if CharacterPaletteGuard.consume(event, window: self) { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+    @objc func orderFrontCharacterPalette(_ sender: Any?) { CharacterPaletteGuard.recordAction() }
+
     override func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
         guard place == .out || WindowPrivacy.canPresent(self) else { return }
         super.order(place, relativeTo: otherWin)

@@ -10,7 +10,7 @@ enum DiagnosticGlass {
         let captureRequested = ProcessInfo.processInfo.arguments.contains("-RecetteProtectedCapture")
         guard !captureRequested || ScreenCapturer.hasPermission else { record("controlled glass previews need existing screen permission", false); return }
         let screen = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1000, height: 800)
-        let window = NSPanel(contentRect: CGRect(x: screen.minX + 30, y: screen.maxY - 550, width: 720, height: 520), styleMask: [.nonactivatingPanel, .borderless], backing: .buffered, defer: false)
+        let window = ProtectedPanel(contentRect: CGRect(x: screen.minX + 30, y: screen.maxY - 550, width: 720, height: 520), styleMask: [.nonactivatingPanel, .borderless], backing: .buffered, defer: false)
         window.sharingType = .none
         window.level = .floating; window.isReleasedWhenClosed = false
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]

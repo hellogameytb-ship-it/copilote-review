@@ -60,8 +60,8 @@ final class HistoryController: ObservableObject {
         reload()
     }
 
-    func export(_ record: SessionRecord) {
-        do { exportNotice = nil; try SystemDialogs.saveMarkdown(record.markdown, name: "\(record.title).md") }
+    func export(_ record: SessionRecord) async {
+        do { exportNotice = nil; try await SystemDialogs.saveMarkdown(record.markdown, name: "\(record.title).md") }
         catch { exportNotice = error.localizedDescription }
     }
 

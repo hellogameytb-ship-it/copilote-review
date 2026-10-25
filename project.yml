@@ -60,13 +60,13 @@ targets:
         CFBundleName: Copilote
         CFBundleDisplayName: Copilote
         CFBundleShortVersionString: "0.1.1"
-        CFBundleVersion: "12"
+        CFBundleVersion: "13"
         LSApplicationCategoryType: public.app-category.productivity
         # Starts as an agent (.accessory): launched from a full-screen Space, it never takes the user
         # to another Space; the Dock icon comes only with the stealth mode off.
         LSUIElement: true
         LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
-        NSPrincipalClass: NSApplication
+        NSPrincipalClass: CopiloteApplication
         NSHumanReadableCopyright: "Project contributors — personal use"
         NSMicrophoneUsageDescription: "Copilote transcribes your voice (Me channel) on your Mac during a session you start. Audio is not recorded."
     settings:

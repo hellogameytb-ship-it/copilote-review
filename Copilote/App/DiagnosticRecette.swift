@@ -49,7 +49,7 @@ enum DiagnosticRecette {
         let overlay = OverlayController(settings: settings)
         let session = SessionController(settings: settings, overlay: overlay, capturer: ScreenCapturer(), providers: providers)
         let listening = ListeningController(settings: settings, providers: providers, base: base)
-        SystemDialogs.observe(listening)
+        SystemDialogs.observe(listening, defaults: settings.defaults)
         listening.answers = session
         let assist = AssistController(settings: settings, session: session, base: base, overlay: overlay)
         let notes = NotesController(settings: settings, providers: providers)
@@ -71,7 +71,7 @@ enum DiagnosticRecette {
             pillBody: PillHost(listening: listening, assist: assist, providers: providers, overlay: overlay.model, onAsk: overlay.startTyping, settings: settings, onUnfold: overlay.pillClicked, onMenu: { state, rect in menu.toggle(PillMenuContent.menu(for: state), anchor: overlay.screenRect(fromPill: rect)) { _ in } })
         )
         NSApp.setActivationPolicy(.accessory)
-        if !args.contains("-RecetteProfileOnly") && !args.contains("-RecettePresentationOnly") && !args.contains("-RecetteDialogGuardOnly") {
+        if !args.contains("-RecetteProfileOnly") && !args.contains("-RecettePresentationOnly") && !args.contains("-RecetteDialogGuardOnly") && !args.contains("-RecetteFileBrowserOnly") {
             WindowPrivacy.authorizeFromUserGesture(); overlay.start()
         }
         overlay.onPresentationChange = { session.stickyNotes.setHiddenWithOverlay($0 == .hidden) }
@@ -88,6 +88,10 @@ enum DiagnosticRecette {
             func pause(_ ms: Int = 450) async { try? await Task.sleep(for: .milliseconds(ms)) }
             @MainActor func fieldEditor() -> NSTextView? { NSApp.windows.first { $0.isVisible && $0.isKeyWindow && $0 is OverlayPanel }?.firstResponder as? NSTextView }
             await pause()
+            if args.contains("-RecetteFileBrowserOnly") {
+                await DiagnosticFileBrowser.run(settings: settings, listening: listening, folder: folder, record: record)
+                defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
+            }
             if args.contains("-RecetteDialogGuardOnly") {
                 await DiagnosticDialogGuard.run(settings: settings, listening: listening, overlay: overlay, folder: folder, record: record)
                 defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
