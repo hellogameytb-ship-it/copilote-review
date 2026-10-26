@@ -109,7 +109,8 @@ class OverlayPanel: ProtectedPanel {
     /// "Demander" types into this editor: nothing it shows may be a system window. A secure field
     /// keeps the system's own editor. SwiftUI fields must also retain their private editor.
     override func fieldEditor(_ createFlag: Bool, for object: Any?) -> NSText? {
-        guard object is OverlayAskTextField else { return super.fieldEditor(createFlag, for: object) }
+        guard let field = object as? OverlayAskTextField else { return super.fieldEditor(createFlag, for: object) }
+        quietEditor.askField = field
         return quietEditor
     }
 }
@@ -119,6 +120,19 @@ class OverlayPanel: ProtectedPanel {
 /// completion or inline prediction, no Writing Tools, no Look Up, no Emoji & Symbols palette.
 /// The checks are refused in the getters too: NSTextField pushes its own settings onto its editor.
 private final class QuietFieldEditor: NSTextView {
+    weak var askField: OverlayAskTextField?
+
+    override func paste(_ sender: Any?) {
+        guard let field = askField else { super.paste(sender); return }
+        let board = field.pasteboardForPaste()
+        if let snapshot = Clipboard.composerImages(from: board) {
+            field.onPasteImages(snapshot)
+        } else {
+            // Native selection replacement, Unicode and plain-text/RTF conversion are preserved.
+            _ = readSelection(from: board)
+        }
+    }
+
     static func make() -> QuietFieldEditor {
         let editor = fieldEditor()
         editor.isAutomaticQuoteSubstitutionEnabled = false

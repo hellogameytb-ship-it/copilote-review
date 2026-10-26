@@ -17,13 +17,16 @@ struct ScreenshotStackView: View {
         HStack(spacing: 10) {
             Button("Add region", action: session.captureRegion)
             Spacer(minLength: 0)
+            if session.isPastingImages {
+                Button("Cancel import", action: session.cancelImagePaste)
+            }
             if session.isAnswering {
                 Button("Cancel", action: session.cancelCurrent)
                     .background(InlineControlBounds(id: "CaptureCancel", action: session.cancelCurrent))
             }
             Button("Answer screenshots", action: session.sendCaptures)
                 .background(InlineControlBounds(id: "CaptureSend", action: session.sendCaptures))
-                .disabled(session.stackImages.isEmpty)
+                .disabled(session.stackImages.isEmpty || session.isPastingImages)
         }
         .font(.system(size: 11, weight: .medium))
         .buttonStyle(.plain)

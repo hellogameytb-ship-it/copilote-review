@@ -70,6 +70,11 @@ if chat_file.exists():
     chat = json.loads(chat_file.read_text())
     summary['chatChecks'] = len(chat['checks'])
     summary['chatFailures'] = [row['name'] for row in chat['checks'] if not row['passed']]
+paste_file = output / 'paste.json'
+if paste_file.exists():
+    paste = json.loads(paste_file.read_text())
+    summary['pasteChecks'] = len(paste['checks'])
+    summary['pasteFailures'] = [row['name'] for row in paste['checks'] if not row['passed']]
 (output / 'summary.json').write_text(json.dumps(summary, indent=2))
 print(json.dumps(summary, indent=2))
 assert not failures, 'Headless geometry regression failed'

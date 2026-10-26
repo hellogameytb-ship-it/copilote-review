@@ -1,3 +1,19 @@
+# Current update — build 20 image paste
+
+Command-V in the Ask composer now adds copied images to the existing preview stack without sending a request. The draft, selection and local focus are retained. Ordinary text uses native selection replacement and updates the SwiftUI binding. Text URLs remain text and are never downloaded.
+
+Copied image files outrank Finder names/icons. Otherwise PNG outranks TIFF per item; image data outranks companion text. Paste snapshots are taken only on the explicit gesture, with no clipboard polling. Multiple items and rapid gestures preserve order. Limits: 20 images, 32 MiB per image and 64 MiB per gesture; background thumbnail decoding feeds the existing JPEG pipeline capped at 1600 pixels.
+
+Sending waits for import completion. Cancel import invalidates pending batches/decodes while preserving completed previews. Full reset prevents late images from reappearing. Clear chat continues to preserve pending captures and exclusion choices. Unsupported or invalid images produce inline feedback, with no system dialogs. Preserve these distinctions in follow-up changes.
+
+Validation: 329 framework tests; 1,228 native fixture checks including 29 paste, 23 chat and 18 fresh-Answer checks; 613 geometry samples without required movement; 17 window-policy probes and overlay linter pass. Tests invoke Paste on the production editor with an isolated pasteboard and synthetic images/provider. Initial color-fixture failures were corrected and final results rerun. No physical keyboard gesture, third-party clipboard integration, real audio, desktop capture or live AI was tested. The sanitized export is not independently rebuilt.
+
+Build20 installed after idle verification and build19 backup. Installed binary SHA-256 independently verified: 7a41cf7e42273bc55b2a3560228146e26688810d019f1c1d04e0bf0d638d4b2f; signature passes. Startup remains hidden. No private profile, notes, source documents or original Git history are exported. Capture exclusion is not a universal invisibility guarantee.
+
+---
+
+Historical updates below are superseded by build20 where applicable.
+
 # Current update — build 19 installed and verified
 
 The reader is now a chronological chat: manual Ask/Answer requests retain their actual question and response; streaming updates only that entry. Explicit topic-card navigation can add/select its cached response. Scrolling up stays anchored while newer content arrives; Latest returns to the bottom. Copy belongs to each entry. Retry is available only for the selected failed request and validates its ID.

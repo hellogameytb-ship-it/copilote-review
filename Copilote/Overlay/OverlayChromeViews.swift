@@ -70,7 +70,7 @@ struct OverlayBody: View {
                     .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                 }
                 if overlay.isTyping {
-                    AskField(text: $assist.askText, wantsFocus: overlay.isTyping, onCancel: onEndTyping, onSubmit: assist.submitAsk)
+                    AskField(text: $assist.askText, onPasteImages: session.pasteImages, wantsFocus: overlay.isTyping, onCancel: onEndTyping, onSubmit: assist.submitAsk)
                         .onExitCommand(perform: onEndTyping)
                 } else {
                     AskPrompt(onStart: onStartTyping)

@@ -106,6 +106,7 @@ final class AssistController: ObservableObject {
 
     /// Shared by Answer and its existing keyboard shortcut; a fresh lookup for frozen speech.
     func answerNow() {
+        guard !session.isPastingImages else { session.reportImagePastePending(); return }
         extractsTask?.cancel()
         session.prepareFreshAnswer()
         refresh()
@@ -138,6 +139,7 @@ final class AssistController: ObservableObject {
 
     /// "Demander": the typed question, then the keyboard goes back to the call.
     func submitAsk() {
+        guard !session.isPastingImages else { session.reportImagePastePending(); return }
         let text = askText.trimmingCharacters(in: .whitespacesAndNewlines)
         overlay.endTyping()
         guard !text.isEmpty else { return }

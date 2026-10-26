@@ -392,6 +392,7 @@ struct AskPrompt: View {
 /// "Demander": a one-line field; the panel takes the keyboard only while it is focused.
 struct AskField: View {
     @Binding var text: String
+    var onPasteImages: (ComposerImagePaste) -> Void = { _ in }
     var wantsFocus = true
     var onCancel: () -> Void = {}
     var onSubmit: () -> Void = {}
@@ -411,13 +412,16 @@ struct AskField: View {
     }
 
     private var field: some View {
-        NativeAskField(text: $text, wantsFocus: wantsFocus, onCancel: onCancel, onSubmit: onSubmit)
+        NativeAskField(text: $text, wantsFocus: wantsFocus, onCancel: onCancel, onSubmit: onSubmit, onPasteImages: onPasteImages)
     }
 }
 
 /// Only this native cell accepts our quiet field editor. SwiftUI's private text cells require
 /// their own editor subclass, so substituting an NSTextView there crashes during focus.
 final class OverlayAskTextField: NSTextField {
+    var onPasteImages: (ComposerImagePaste) -> Void = { _ in }
+    /// Invoked only by Paste; diagnostics use their own named pasteboard.
+    var pasteboardForPaste: () -> NSPasteboard = { .general }
     var wantsFocus = false
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -445,6 +449,7 @@ private struct NativeAskField: NSViewRepresentable {
     var wantsFocus: Bool
     var onCancel: () -> Void
     var onSubmit: () -> Void
+    var onPasteImages: (ComposerImagePaste) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> OverlayAskTextField {
@@ -461,6 +466,7 @@ private struct NativeAskField: NSViewRepresentable {
     }
     func updateNSView(_ field: OverlayAskTextField, context: Context) {
         context.coordinator.parent = self
+        field.onPasteImages = onPasteImages
         if field.stringValue != text { field.stringValue = text }
         field.wantsFocus = wantsFocus
         if wantsFocus { field.requestFocus() }

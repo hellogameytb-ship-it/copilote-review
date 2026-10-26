@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import CopiloteKit
 
 /// One answer of the session, listed in the main window.
@@ -51,6 +52,10 @@ final class SessionController: ObservableObject {
     private let providers: ProviderController
 
     @Published private var stack = CaptureStack()
+    @Published private(set) var isPastingImages = false
+    private var imagePasteQueue: Task<Void, Never>?
+    private var pendingImagePastes = 0
+    private var imagePasteGeneration = UUID()
     @Published private(set) var cardAnswers: [String: String] = [:]
     private var requests: [Int: AnswerRequest] = [:]
     private var conversation = Conversation()
@@ -167,12 +172,56 @@ final class SessionController: ObservableObject {
         }
     }
 
+    func reportImagePastePending() { overlay.setStatus("Adding pasted images… wait before sending", tone: .working) }
+
+    /// Serial import keeps item order across rapid Paste gestures. It never sends a request.
+    func pasteImages(_ snapshot: ComposerImagePaste) {
+        pendingImagePastes += 1; isPastingImages = true
+        reportImagePastePending()
+        let generation = imagePasteGeneration
+        let previous = imagePasteQueue
+        imagePasteQueue = Task { [weak self] in
+            await previous?.value
+            guard let self, self.imagePasteGeneration == generation else { return }
+            var added = 0, skipped = snapshot.skipped
+            for data in snapshot.images {
+                guard self.stack.images.count < self.stack.capacity else { skipped += 1; continue }
+                let encoded = await Task.detached(priority: .userInitiated) { () -> CapturedImage? in
+                    guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                          let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                            kCGImageSourceCreateThumbnailFromImageAlways: true,
+                            kCGImageSourceCreateThumbnailWithTransform: true,
+                            kCGImageSourceThumbnailMaxPixelSize: ImageEncoder.maxLongEdge
+                          ] as CFDictionary) else { return nil }
+                    return ImageEncoder.encodeForModel(image)
+                }.value
+                guard self.imagePasteGeneration == generation else { return }
+                guard let encoded else { skipped += 1; continue }
+                if self.stack.push(encoded) == .added { added += 1 } else { skipped += 1 }
+            }
+            self.pendingImagePastes -= 1; self.isPastingImages = self.pendingImagePastes > 0
+            self.overlay.setCounter(self.stack.summary)
+            let text = "\(added) pasted image\(added == 1 ? "" : "s") added · not sent" +
+                (skipped > 0 ? " · \(skipped) skipped (unsupported, too large, or 20-image limit)" : "")
+            self.overlay.setStatus(self.isPastingImages ? "Adding pasted images…" : text, tone: skipped > 0 ? .failed : .idle)
+        }
+    }
+
+    /// Invalidates in-flight decoding as well as queued batches; already-added previews stay.
+    func cancelImagePaste() {
+        imagePasteGeneration = UUID()
+        imagePasteQueue?.cancel(); imagePasteQueue = nil
+        pendingImagePastes = 0; isPastingImages = false
+        overlay.setStatus("Image import cancelled · existing previews kept", tone: .idle)
+    }
+
     func removeCapture(at index: Int) { stack.remove(at: index); overlay.setCounter(stack.summary) }
     func moveCapture(from index: Int, to destination: Int) { stack.move(from: index, to: destination); overlay.setCounter(stack.summary) }
 
     // MARK: Sending (⌘⇧↩, ⌘⇧V, ⌥1-4)
 
     func sendCaptures() {
+        guard !isPastingImages else { return reportImagePastePending() }
         // Captures are always added explicitly and submitted in their displayed order.
         guard !stack.isEmpty else { overlay.setStatus("Add a screenshot first", tone: .idle); return }
         let images = stack.drain()
@@ -185,6 +234,7 @@ final class SessionController: ObservableObject {
     /// « Réessayer » under a failed answer: the same request again (captures go back to the stack
     /// instead, and ⇧⌘↩ resends them).
     func retry(expectedID: Int? = nil) {
+        guard !isPastingImages else { return reportImagePastePending() }
         guard let failed = shown, failed.failure != nil, failed.restoring.isEmpty, !isBusy,
               failed.profileScope == settings.interviewScope, requests[failed.id] === failed,
               expectedID == nil || expectedID == failed.id else { return }
@@ -196,6 +246,7 @@ final class SessionController: ObservableObject {
     }
 
     func sendClipboard() {
+        guard !isPastingImages else { return reportImagePastePending() }
         switch Clipboard.read() {
         case let .text(text):
             send(.clipboardText(text), label: "Clipboard text", restoring: [])
@@ -257,6 +308,7 @@ final class SessionController: ObservableObject {
     }
 
     func assist(_ question: AssistQuestion, label: String, topic: Topic?, plan: (@MainActor () async -> AnswerPlan)? = nil) {
+        guard !isPastingImages else { return reportImagePastePending() }
         if question.typed, isBusy {
             cancelCurrent()
         }
@@ -285,6 +337,7 @@ final class SessionController: ObservableObject {
     /// Drafted by itself and shown like any answer, without taking the overlay out of ⌘\.
     /// Never over an answer the user asked for; a newer automatic one replaces it.
     func answerAutomatically(_ question: AssistQuestion, label: String, topic: Topic) {
+        guard !isPastingImages else { return }
         guard let provider = providers.current() else { return }
         for old in requests.values.filter({ $0.isAutomatic && $0.topic?.id == topic.id && $0.profileScope == settings.interviewScope }) {
             if old.topic == TopicVersion(topic), old.failure == nil, old.profileScope == settings.interviewScope { return }
@@ -364,6 +417,7 @@ final class SessionController: ObservableObject {
     }
 
     private func send(_ input: UserInput, label: String, restoring images: [CapturedImage], topic: Topic? = nil, plan: (@MainActor () async -> AnswerPlan)? = nil) {
+        guard !isPastingImages else { restore(images); return reportImagePastePending() }
         guard !isBusy else {
             restore(images)
             return reportBusy()
@@ -618,7 +672,7 @@ final class SessionController: ObservableObject {
         answeringTopicID = nil
         isAnswering = false
         lastFinished = nil
-        if !preserveCaptures { stack = CaptureStack() }
+        if !preserveCaptures { cancelImagePaste(); stack = CaptureStack() }
         conversation.clear()
         overlay.setCounter(stack.summary)
         overlay.setStatus("Screenshots and answer history cleared", tone: .idle)

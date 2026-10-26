@@ -47,3 +47,48 @@ enum Clipboard {
         pasteboard.setString(text, forType: .string)
     }
 }
+
+/// Immutable image bytes captured only by the composer's explicit Paste gesture.
+struct ComposerImagePaste: Sendable {
+    let images: [Data]
+    let skipped: Int
+}
+
+extension Clipboard {
+    /// File URLs outrank Finder's text/icon representations; real images outrank accompanying text.
+    /// nil delegates ordinary text/RTF pasting to AppKit. Text URLs are never fetched.
+    static func composerImages(from board: NSPasteboard) -> ComposerImagePaste? {
+        let items = board.pasteboardItems ?? []
+        let files = items.compactMap { item -> URL? in
+            guard let value = item.string(forType: .fileURL), let url = URL(string: value), url.isFileURL else { return nil }
+            return url
+        }
+        var images: [Data] = []
+        var skipped = 0
+        var bytes = 0
+        let itemLimit = 20, fileLimit = 32 * 1024 * 1024, totalLimit = 64 * 1024 * 1024
+        func accept(_ data: Data?) {
+            guard images.count < itemLimit, let data, !data.isEmpty,
+                  data.count <= fileLimit, bytes + data.count <= totalLimit else { skipped += 1; return }
+            images.append(data); bytes += data.count
+        }
+        if !files.isEmpty {
+            for url in files {
+                guard images.count < itemLimit,
+                      let values = try? url.resourceValues(forKeys: [.contentTypeKey, .fileSizeKey, .isRegularFileKey]),
+                      values.isRegularFile == true, values.contentType?.conforms(to: .image) == true,
+                      let size = values.fileSize, size <= fileLimit, bytes + size <= totalLimit else { skipped += 1; continue }
+                accept(try? Data(contentsOf: url))
+            }
+            return ComposerImagePaste(images: images, skipped: skipped)
+        }
+        var hasImage = false
+        for item in items {
+            guard let type = [NSPasteboard.PasteboardType.png, .tiff].first(where: { item.types.contains($0) }) else { continue }
+            hasImage = true
+            if images.count >= itemLimit { skipped += 1; continue }
+            accept(item.data(forType: type))
+        }
+        return hasImage ? ComposerImagePaste(images: images, skipped: skipped) : nil
+    }
+}

@@ -46,7 +46,7 @@ enum Copy {
         static let pin = "Pin"
         static let unpin = "Unpin"
         static let askPlaceholder = "Ask about this conversation or your screenshots…"
-        static let askHint = "Return to send · Escape to cancel"
+        static let askHint = "⌘V to paste text or images · Return to send · Escape to cancel"
         static func target(_ title: String?) -> String { title.map { "Subject: \($0)" } ?? "Subject: current conversation" }
         static let clearTarget = "Use the current conversation"
         static func context(_ included: Int, of total: Int) -> String { "Context · \(included)/\(total)" }
