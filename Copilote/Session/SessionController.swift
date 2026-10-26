@@ -63,6 +63,12 @@ final class SessionController: ObservableObject {
     /// The answer in the overlay.
     private var shown: AnswerRequest?
     private var keepsManualFocus = false
+    private var chat: [AnswerRequest] = []
+    private var chatGeneration = UUID()
+    private var navigationSerial = 0
+    private var navigationID: Int?
+    var onClearChat: (() -> Void)?
+
     private var renderScheduled = false
 
     /// One call to the model. Its turn joins the conversation only once it is shown and complete.
@@ -89,6 +95,7 @@ final class SessionController: ObservableObject {
         let started = Date()
         var text = ""
         var isFinal = false
+        var wasCancelled = false
         var content: [JSONValue] = []
         var notice: Notice?
         var firstTokenLatency: TimeInterval?
@@ -118,7 +125,8 @@ final class SessionController: ObservableObject {
         self.capturer = capturer
         overlay.setCounter(stack.summary)
         refreshShortcutHints()
-        overlay.onRetry = { [weak self] in self?.retry() }
+        overlay.onRetry = { [weak self] id in self?.retry(expectedID: id) }
+        overlay.onClearChat = { [weak self] in self?.clearChat() }
     }
 
     // MARK: Captures (⌘⇧S, ⌘⇧A)
@@ -176,8 +184,10 @@ final class SessionController: ObservableObject {
 
     /// « Réessayer » under a failed answer: the same request again (captures go back to the stack
     /// instead, and ⇧⌘↩ resends them).
-    func retry() {
-        guard let failed = shown, failed.failure != nil, failed.restoring.isEmpty, !isBusy else { return }
+    func retry(expectedID: Int? = nil) {
+        guard let failed = shown, failed.failure != nil, failed.restoring.isEmpty, !isBusy,
+              failed.profileScope == settings.interviewScope, requests[failed.id] === failed,
+              expectedID == nil || expectedID == failed.id else { return }
         guard let provider = providers.current() else {
             overlay.setStatus(providers.unavailableReason, tone: .failed)
             return
@@ -190,11 +200,13 @@ final class SessionController: ObservableObject {
         case let .text(text):
             send(.clipboardText(text), label: "Clipboard text", restoring: [])
         case let .image(image):
+            let generation = chatGeneration
             Task {
                 guard let encoded = await Self.encode(image) else {
                     overlay.setStatus("Clipboard image could not be read", tone: .failed)
                     return
                 }
+                guard generation == chatGeneration else { return }
                 send(.clipboardImage(encoded), label: "Clipboard image", restoring: [])
             }
         case .unsupportedFile:
@@ -240,7 +252,7 @@ final class SessionController: ObservableObject {
         prepareFreshAnswer()
         shown = nil; answeringTopicID = nil; isAnswering = false; isShowingAutomatic = false
         answerPhase = .none; lastFinished = nil
-        overlay.resetAnswer()
+        render()
         overlay.setStatus("No speech to answer yet · start a session or use Ask", tone: .idle)
     }
 
@@ -277,7 +289,8 @@ final class SessionController: ObservableObject {
         for old in requests.values.filter({ $0.isAutomatic && $0.topic?.id == topic.id && $0.profileScope == settings.interviewScope }) {
             if old.topic == TopicVersion(topic), old.failure == nil, old.profileScope == settings.interviewScope { return }
             old.task?.cancel()
-            if old === shown, !old.isFinal {
+            if !old.isFinal {
+                old.wasCancelled = true
                 old.isFinal = true
                 old.notice = .init(kind: "warning", text: "An updated answer is preparing. Select this subject to read it.")
                 finish(old)
@@ -300,6 +313,7 @@ final class SessionController: ObservableObject {
         guard stack.isEmpty, let cached = requests.values.filter({ $0.topic == TopicVersion(topic) && $0.failure == nil && $0.profileScope == settings.interviewScope }).max(by: { $0.id < $1.id }) else { return false }
         if shown !== cached { cancelCurrent() }
         keepsManualFocus = true
+        navigationSerial += 1; navigationID = cached.id
         show(cached)
         return true
     }
@@ -311,6 +325,8 @@ final class SessionController: ObservableObject {
     func cancelAutomatic(for topicID: String) {
         for request in requests.values.filter({ $0.isAutomatic && !$0.isFinal && $0.topic?.id == topicID }) {
             request.task?.cancel()
+            request.isFinal = true; request.wasCancelled = true
+            request.notice = .init(kind: "warning", text: "Automatic draft paused")
             updateHistory(request, note: "Automatic draft paused")
             requests.removeValue(forKey: request.id)
             cardAnswers[topicID] = "Paused — refresh to answer"
@@ -320,8 +336,8 @@ final class SessionController: ObservableObject {
                 isAnswering = false
                 isShowingAutomatic = false
                 answerPhase = .none
-                overlay.resetAnswer()
             }
+            render()
         }
     }
 
@@ -330,7 +346,9 @@ final class SessionController: ObservableObject {
         let incoming = requests.values.filter { $0.topic?.id == id }
         if !incoming.isEmpty {
             for old in requests.values.filter({ $0.topic?.id == topic.id && $0.topic != TopicVersion(topic) }) {
-                old.task?.cancel(); requests.removeValue(forKey: old.id)
+                old.task?.cancel(); old.isFinal = true; old.wasCancelled = true
+                old.notice = .init(kind: "warning", text: "Superseded by the updated subject")
+                requests.removeValue(forKey: old.id)
             }
         }
         for request in incoming { request.topic = TopicVersion(topic) }
@@ -372,6 +390,7 @@ final class SessionController: ObservableObject {
         request.profileScope = settings.interviewScope
         profilesByRequest[request.id] = settings.interviewScope
         requests[request.id] = request
+        if !isAutomatic { chat.append(request) }
         history.insert(HistoryEntry(id: request.id, date: request.started, input: request.label, text: ""), at: 0)
         conversation.preferences = settings.answerPreferences
         var draft = Conversation()
@@ -379,12 +398,14 @@ final class SessionController: ObservableObject {
         draft.preferences = settings.answerPreferences
         let allowedNotes = Set(stickyNotes.notes.filter { $0.deletedAt == nil && $0.includeInAI }.map(\.id))
         notesByRequest[request.id] = allowedNotes
-        let earlier = history.filter { $0.id >= contextStartRequestID && profilesByRequest[$0.id] == settings.interviewScope && $0.id != request.id && !$0.text.isEmpty && (notesByRequest[$0.id] ?? []).isSubset(of: allowedNotes) }.reversed().map {
-            "Earlier assistant draft (not evidence of personal facts): \($0.input)\n\($0.text)"
-        }.joined(separator: "\n\n")
+        let earlier = ChatContextBudget.previousExchanges(chat.filter {
+            $0.id >= contextStartRequestID && $0.id != request.id && $0.profileScope == settings.interviewScope &&
+            $0.isFinal && !$0.wasCancelled && $0.failure == nil && !$0.text.isEmpty &&
+            (notesByRequest[$0.id] ?? []).isSubset(of: allowedNotes)
+        }.map { (question: questionText($0), answer: $0.text) })
         let personalNotes = stickyNotes.includedContext
-        let priorTyped = typedRequests.filter { $0.scope == settings.interviewScope }.map(\.text)
-        if case let .assist(question) = input, question.typed, let text = question.question { typedRequests.append((settings.interviewScope, text)) }
+        let priorTyped = typedRequests.filter { $0.scope == settings.interviewScope }.suffix(4).map { String($0.text.prefix(1000)) }
+        if case let .assist(question) = input, question.typed, let text = question.question { typedRequests.append((settings.interviewScope, text)); typedRequests = Array(typedRequests.suffix(6)) }
         let requestID = request.id
         request.task = Task { [weak self] in
             do {
@@ -428,6 +449,7 @@ final class SessionController: ObservableObject {
     }
 
     private func show(_ request: AnswerRequest) {
+        if !chat.contains(where: { $0 === request }) { chat.append(request) }
         // Selection changes only the reader; other subjects keep streaming independently.
         if !request.isFinal { lastFinished = nil }
         shown = request
@@ -455,6 +477,7 @@ final class SessionController: ObservableObject {
         if request.text.isEmpty { request.firstTokenLatency = Date().timeIntervalSince(request.started) }
         request.text += text
         if let topic = request.topic { cardAnswers[topic.id] = request.text }
+        if chat.contains(where: { $0 === request }) { scheduleRender() }
         guard request === shown else { return }
         if answerPhase != .reading { answerPhase = .reading }
         if request.text == text { overlay.setStatus("Answering…", tone: .streaming) }
@@ -490,6 +513,7 @@ final class SessionController: ObservableObject {
         if let topic = request.topic { cardAnswers[topic.id] = request.failure ?? request.text }
         if request !== shown {
             updateHistory(request, note: request.failure)
+            render()
             return
         }
         if let failure = request.failure {
@@ -543,6 +567,8 @@ final class SessionController: ObservableObject {
         request.task?.cancel()
         requests.removeValue(forKey: request.id)
         request.isFinal = true
+        request.wasCancelled = true
+        request.notice = .init(kind: "warning", text: "Cancelled")
         returnCaptures(request)
         updateHistory(request, note: "Cancelled")
         if let topic = request.topic { cardAnswers[topic.id] = "Cancelled — refresh to answer" }
@@ -551,13 +577,28 @@ final class SessionController: ObservableObject {
         isAnswering = false
         isShowingAutomatic = false
         answerPhase = .none
-        overlay.resetAnswer()
+        render()
         overlay.setStatus("Cancelled · screenshots kept for retry", tone: .idle)
     }
 
     // MARK: ⌘⇧X
 
-    func clear() {
+    func requestClearChat() { if overlay.isVisible { overlay.requestClearChat() } }
+
+    /// User-confirmed reset; pending screenshots are kept and the audio session keeps running.
+    func clearChat() {
+        for request in requests.values where !request.isFinal { returnCaptures(request) }
+        onClearChat?()
+        resetChat(preserveCaptures: true)
+        keepsManualFocus = true
+        overlay.setStatus("Chat context reset · listening unchanged · saved history kept", tone: .idle)
+    }
+
+    /// Diagnostic/legacy cleanup also clears the screenshot stack.
+    func clear() { resetChat(preserveCaptures: false) }
+
+    private func resetChat(preserveCaptures: Bool) {
+        chatGeneration = UUID()
         keepsManualFocus = false
         contextStartRequestID = nextRequestID + 1
         typedRequests = []
@@ -567,6 +608,8 @@ final class SessionController: ObservableObject {
         }
         for request in requests.values { request.task?.cancel() }
         requests = [:]
+        chat = []; history = []; profilesByRequest = [:]
+        navigationID = nil; navigationSerial = 0
         cardAnswers = [:]
         updatedTopicIDs = []
         shown = nil
@@ -575,7 +618,7 @@ final class SessionController: ObservableObject {
         answeringTopicID = nil
         isAnswering = false
         lastFinished = nil
-        stack = CaptureStack()
+        if !preserveCaptures { stack = CaptureStack() }
         conversation.clear()
         overlay.setCounter(stack.summary)
         overlay.setStatus("Screenshots and answer history cleared", tone: .idle)
@@ -605,25 +648,36 @@ final class SessionController: ObservableObject {
         }
     }
 
+    private func questionText(_ request: AnswerRequest) -> String {
+        switch request.input {
+        case let .assist(question): return question.question ?? question.heard.joined(separator: "\n")
+        case let .topic(question): return question.title
+        case let .clipboardText(text): return text
+        case .clipboardImage: return "Image from clipboard"
+        case let .screenshots(images): return "\(images.count) screenshots"
+        }
+    }
+
     private func render() {
-        // After ⌘⇧X nothing is shown: a pending render must not bring a blank answer back.
-        guard let request = shown else { return }
-        let segments: [JSONValue] = ResponseSegmenter.segments(of: request.text, isFinal: request.isFinal).map { segment in
-            switch segment {
-            case let .markdown(text):
-                return ["kind": "markdown", "text": .string(text)]
-            case let .diagram(source, isComplete):
-                return ["kind": "diagram", "source": .string(source), "complete": .bool(isComplete)]
+        guard !chat.isEmpty else { overlay.resetAnswer(); return }
+        let entries: [JSONValue] = chat.map { request in
+            let segments: [JSONValue] = ResponseSegmenter.segments(of: request.text, isFinal: request.isFinal).map { segment in
+                switch segment {
+                case let .markdown(text): return ["kind": "markdown", "text": .string(text)]
+                case let .diagram(source, complete): return ["kind": "diagram", "source": .string(source), "complete": .bool(complete)]
+                }
             }
+            var row: [String: JSONValue] = ["answerId": .int(request.id), "question": .string(questionText(request)),
+                "segments": .array(segments), "streaming": .bool(!request.isFinal), "selected": .bool(request === shown)]
+            if request.isFinal, !request.text.isEmpty { row["copy"] = .string(request.text) }
+            if let notice = request.notice {
+                row["notice"] = ["kind": .string(notice.kind), "text": .string(notice.text), "retry": .bool(notice.canRetry && request === shown)]
+            }
+            return .object(row)
         }
-        var payload: [String: JSONValue] = ["answerId": .int(request.id), "segments": .array(segments)]
-        // "Copy answer" once it is complete (not at every streamed frame).
-        if request.isFinal, request.failure == nil { payload["copy"] = .string(request.text) }
-        if let notice = request.notice {
-            payload["notice"] = ["kind": .string(notice.kind), "text": .string(notice.text), "retry": .bool(notice.canRetry)]
-        }
-        guard let data = try? JSONEncoder().encode(JSONValue.object(payload)),
-              let json = String(data: data, encoding: .utf8) else { return }
+        var payload: [String: JSONValue] = ["entries": .array(entries), "navigationSerial": .int(navigationSerial)]
+        if let navigationID { payload["navigationID"] = .int(navigationID) }
+        guard let data = try? JSONEncoder().encode(JSONValue.object(payload)), let json = String(data: data, encoding: .utf8) else { return }
         overlay.render(payloadJSON: json)
     }
 

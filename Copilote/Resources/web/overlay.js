@@ -183,7 +183,7 @@
     node.el.textContent = 'Diagram…';
     renderMermaid(segment.source).then((svg) => {
       diagramCache.set(segment.source, svg);
-      if (node.key !== key) return;
+      if (node.key !== key || !node.el.isConnected) return;
       applyDiagram(node.el, svg, segment.source);
       if (pinned) scrollToBottom();
       updateFades();
@@ -248,6 +248,11 @@
   // ---- Rendering ----------------------------------------------------------
 
   let nodes = [];
+  const entries = new Map();
+  let navigationSerial = 0;
+  const latest = document.getElementById('latest');
+  const confirmation = document.getElementById('clear-confirmation');
+  const resetNotice = document.getElementById('reset-notice');
   let currentAnswerId = null;
   let pending = null;
   let frame = 0;
@@ -269,40 +274,63 @@
     pending = null;
     if (!payload) return;
 
-    if (payload.answerId !== currentAnswerId) {
-      currentAnswerId = payload.answerId;
-      clearAnswer();
-      answer.classList.remove('entering');
-      void answer.offsetWidth; // restart the settle animation
-      answer.classList.add('entering');
-      pinned = true;
+    const rows = payload.entries || [payload];
+    const oldTop = scroller.scrollTop;
+    const anchor = [...entries.values()].find(row => row.el.getBoundingClientRect().bottom > scroller.getBoundingClientRect().top);
+    const anchorOffset = anchor && anchor.el.getBoundingClientRect().top;
+    let changed = false;
+    const ids = new Set(rows.map(row => String(row.answerId)));
+    for (const [id, row] of entries) {
+      if (!ids.has(id)) { row.el.remove(); entries.delete(id); changed = true; }
     }
-    empty.hidden = true;
-    answer.hidden = false;
-
-    payload.segments.forEach((segment, index) => {
-      let node = nodes[index];
-      if (!node || node.kind !== segment.kind) {
-        const el = document.createElement('div');
-        if (node) answer.replaceChild(el, node.el); else answer.appendChild(el);
-        node = nodes[index] = { kind: segment.kind, key: null, el };
+    empty.hidden = rows.length > 0;
+    answer.hidden = rows.length === 0;
+    notice.hidden = true; tools.hidden = true;
+    rows.forEach(payloadRow => {
+      const id = String(payloadRow.answerId);
+      let row = entries.get(id);
+      if (!row) {
+        const el = document.createElement('section'); el.className = 'chat-entry'; el.dataset.answerId = id;
+        const question = document.createElement('div'); question.className = 'chat-question';
+        const response = document.createElement('div'); response.className = 'chat-response';
+        const rowNotice = document.createElement('div'); rowNotice.className = 'entry-notice';
+        const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'copy copy-answer'; copy.textContent = 'Copy answer';
+        el.append(question, response, rowNotice, copy); answer.appendChild(el);
+        row = { el, question, response, notice: rowNotice, copy, nodes: [], key: '' }; entries.set(id, row);
       }
-      if (segment.kind === 'markdown') {
-        if (node.key !== segment.text) {
-          node.el.innerHTML = marked.parse(segment.text);
-          stripTooltips(node.el);
-          node.key = segment.text;
+      const key = JSON.stringify(payloadRow);
+      if (row.key === key) return;
+      row.key = key; changed = true;
+      row.el.classList.toggle('selected', !!payloadRow.selected);
+      row.el.classList.toggle('finished', !payloadRow.streaming);
+      row.question.textContent = payloadRow.question || ''; row.question.hidden = !payloadRow.question;
+      payloadRow.segments.forEach((segment, index) => {
+        let node = row.nodes[index];
+        if (!node || node.kind !== segment.kind) {
+          const el = document.createElement('div');
+          if (node) row.response.replaceChild(el, node.el); else row.response.appendChild(el);
+          node = row.nodes[index] = { kind: segment.kind, key: null, el };
         }
-      } else {
-        renderDiagram(node, segment);
+        if (segment.kind === 'markdown') {
+          if (node.key !== segment.text) { node.el.innerHTML = marked.parse(segment.text); stripTooltips(node.el); node.key = segment.text; }
+        } else { renderDiagram(node, segment); }
+      });
+      while (row.nodes.length > payloadRow.segments.length) row.nodes.pop().el.remove();
+      row.copyText = payloadRow.copy || null; row.copy.hidden = !row.copyText;
+      row.notice.textContent = payloadRow.notice ? payloadRow.notice.text : '';
+      if (payloadRow.notice && payloadRow.notice.retry) {
+        const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'copy retry'; retry.textContent = 'Retry'; row.notice.append(' ', retry);
       }
     });
-    while (nodes.length > payload.segments.length) nodes.pop().el.remove();
-
-    copyText = payload.copy || null;
-    tools.hidden = !copyText;
-    setNotice(payload.notice);
-    if (pinned) scrollToBottom();
+    const navigate = payload.navigationSerial && payload.navigationSerial !== navigationSerial;
+    navigationSerial = payload.navigationSerial || 0;
+    if (navigate && entries.has(String(payload.navigationID))) {
+      entries.get(String(payload.navigationID)).el.scrollIntoView({ block: 'start' }); pinned = isAtBottom();
+    } else if (pinned) { scrollToBottom(); }
+    else if (anchor && anchor.el.isConnected) { scroller.scrollTop = oldTop + anchor.el.getBoundingClientRect().top - anchorOffset; }
+    else { scroller.scrollTop = oldTop; }
+    if (changed && !pinned) latest.hidden = false;
+    if (pinned) latest.hidden = true;
     updateFades();
   }
 
@@ -327,12 +355,16 @@
   function clearAnswer() {
     nodes = [];
     answer.innerHTML = '';
+    entries.clear();
     copyText = null;
     tools.hidden = true;
   }
 
   function reset() {
     pending = null;
+    if (frame) cancelAnimationFrame(frame); frame = 0;
+    closeZoom(); diagramCache.clear(); cancelClearChat();
+    navigationSerial = 0; latest.hidden = true;
     currentAnswerId = null;
     clearAnswer();
     answer.hidden = true;
@@ -374,7 +406,7 @@
   scroller.addEventListener('scroll', () => {
     const top = scroller.scrollTop;
     if (top < lastScrollTop - 1) pinned = false;
-    else if (top > lastScrollTop && isAtBottom()) pinned = true;
+    else if (top > lastScrollTop && isAtBottom()) { pinned = true; latest.hidden = true; }
     lastScrollTop = top;
     updateFades();
   }, { passive: true });
@@ -411,7 +443,11 @@
     const link = event.target.closest('a');
     if (link) { event.preventDefault(); if (native && link.href.startsWith('https://')) native.postMessage({ type: 'openSource', url: link.href }); return; }
     const button = event.target.closest('.copy');
-    if (button) copyAndConfirm(button, button.closest('.code').querySelector('code').textContent);
+    if (button && button.classList.contains('retry')) { if (native) native.postMessage({ type: 'retry', requestID: Number(button.closest('.chat-entry').dataset.answerId) }); return; }
+    if (button && button.classList.contains('copy-answer')) {
+      const row = entries.get(button.closest('.chat-entry').dataset.answerId);
+      if (row && row.copyText) copyAndConfirm(button, row.copyText);
+    } else if (button && button.closest('.code')) copyAndConfirm(button, button.closest('.code').querySelector('code').textContent);
   });
 
   tools.addEventListener('click', (event) => {
@@ -434,7 +470,21 @@
     });
   }
 
-  window.copilote = { render, reset, scrollPage, setHints };
+  function requestClearChat() { confirmation.hidden = false; }
+  function cancelClearChat() { confirmation.hidden = true; }
+  document.getElementById('clear-chat').onclick = requestClearChat;
+  document.getElementById('cancel-clear').onclick = cancelClearChat;
+  document.getElementById('confirm-clear').onclick = () => {
+    if (confirmation.hidden) return;
+    cancelClearChat();
+    if (native) native.postMessage({ type: 'clearChat' });
+    resetNotice.hidden = false;
+  };
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') cancelClearChat(); });
+  window.addEventListener('blur', cancelClearChat);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancelClearChat(); });
+  latest.onclick = () => { pinned = true; scrollToBottom(); latest.hidden = true; updateFades(); };
+  window.copilote = { render, reset, scrollPage, setHints, requestClearChat, cancelClearChat };
   setTimeout(() => { loadMermaid().catch(() => {}); }, 1500);
   if (native) native.postMessage({ type: 'ready' });
 })();

@@ -59,7 +59,7 @@ enum ShortcutCatalog {
         (.ask, "Ask a typed question"),
         (.sendCaptures, "Answer the screenshot stack"),
         (.sendClipboard, "Send clipboard"),
-        (.clearContext, "Clear screenshots and answer history"),
+        (.clearContext, "Clear chat and conversation context"),
         (.scrollUp, "Scroll up"),
         (.scrollDown, "Scroll down"),
         (.moveUp, "Move overlay up"),

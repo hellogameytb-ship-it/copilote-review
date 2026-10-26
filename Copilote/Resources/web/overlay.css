@@ -66,7 +66,7 @@ kbd {
 }
 
 /* Answer typography: hierarchy from weight first, size second. */
-#answer > :first-child > :first-child { margin-top: 0; }
+.chat-response > :first-child > :first-child { margin-top: 0; }
 #answer p { margin: 0 0 0.7em; }
 #answer h1, #answer h2, #answer h3, #answer h4 {
   margin: 1.1em 0 0.45em;
@@ -77,14 +77,14 @@ kbd {
 #answer h2 { font-size: 15px; letter-spacing: -0.005em; }
 #answer h3, #answer h4 { font-size: 14px; }
 /* The opening paragraph is what to say: it leads, before any heading takes the eye. */
-#answer > :first-child > p:first-child {
+.chat-response > :first-child > p:first-child {
   font-size: 15px;
   font-weight: 520;
   line-height: 1.45;
   color: #fff;
 }
 /* Labels inside it ("Situation :") still stand out from the sentence. */
-#answer > :first-child > p:first-child strong { font-weight: 720; }
+.chat-response > :first-child > p:first-child strong { font-weight: 720; }
 #answer strong { font-weight: 650; color: #fff; }
 #answer ul, #answer ol { margin: 0 0 0.7em; padding-left: 1.3em; }
 #answer li { margin: 0.15em 0; }
@@ -252,3 +252,20 @@ kbd {
 .katex {
   font-size: 1.1em;
 }
+
+/* The native panel never grows; only this internal conversation scrolls. */
+body { display: flex; flex-direction: column; }
+#scroller { flex: 1; height: auto; min-height: 0; overflow-anchor: none; }
+#chat-controls { flex: none; padding: 4px 16px 6px; border-bottom: 1px solid var(--border); }
+.chat-toolbar { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-secondary); }
+#clear-confirmation p, #reset-notice { font-size: 11px; margin: 5px 0; }
+#clear-confirmation .copy { margin-right: 6px; }
+#confirm-clear { color: var(--warning); }
+.chat-entry { padding: 6px 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.chat-question { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface); border-left: 2px solid var(--accent); border-radius: 6px; padding: 9px 11px; margin: 0 0 10px; font-weight: 550; }
+.chat-entry.selected .chat-question { border-left-width: 3px; }
+.chat-response:empty::after { content: 'Thinking…'; color: var(--text-secondary); }
+.chat-entry.finished .chat-response:empty::after { content: 'No response'; }
+.entry-notice { font-size: 11px; color: var(--warning); margin: 5px 0; }
+#latest { position: absolute; bottom: 10px; right: 22px; background: #302b49; border: 1px solid var(--accent); padding: 6px 10px; border-radius: 14px; z-index: 3; }
+[hidden] { display: none !important; }

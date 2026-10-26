@@ -86,6 +86,8 @@ final class ListeningController: ObservableObject {
     /// Uptime when listening started: the channels' audio clock starts there too.
     private var startedAt: TimeInterval = 0
     private var generation = UUID()
+    private var contextBoundary: TimeInterval = -.infinity
+    private var suppressInterim: Set<Speaker> = []
     private var isStopping = false
     private var recetteSpeaker = Speaker.them
     private(set) var recetteEvents: [String: Int] = [:]
@@ -188,6 +190,7 @@ final class ListeningController: ObservableObject {
             return
         }
 
+        contextBoundary = -.infinity; suppressInterim = []
         topics = []
         transcript = TranscriptBuffer()
         volatile = [:]; volatileUpdatedAt = [:]
@@ -283,6 +286,7 @@ final class ListeningController: ObservableObject {
     func beginRecetteConversation() {
         guard DiagnosticRecette.isRequested else { return }
         generation = UUID()
+        contextBoundary = -.infinity; suppressInterim = []
         topics = []; transcript = TranscriptBuffer(); sessionLines = []; volatile = [:]; volatileUpdatedAt = [:]
         drafting.values.forEach { $0.cancel() }; drafting = [:]; pendingAnswers = [:]; preparationIDs = [:]
         autoAnswers = AutoAnswerPolicy(); answers?.forgetTopics()
@@ -313,6 +317,7 @@ final class ListeningController: ObservableObject {
         session = ListeningSession(transcribers: [(speaker, transcriber)], segmenter: nil, segmenterName: "lexical") { [weak self] event in
             DispatchQueue.main.async { MainActor.assumeIsolated { if self?.generation == run { self?.handle(event) } } }
         }
+        contextBoundary = -.infinity; suppressInterim = []
         topics = []; transcript = TranscriptBuffer(); sessionLines = []; volatile = [:]; volatileUpdatedAt = [:]
         autoAnswers = AutoAnswerPolicy()
         gate.isPaused = false; isPaused = false
@@ -349,6 +354,18 @@ final class ListeningController: ObservableObject {
             await stop()
             state = .failed(message)
         }
+    }
+
+    /// A context boundary on the current audio clock; capture continues uninterrupted.
+    func resetChatContext() {
+        contextBoundary = max(Self.uptime - startedAt, transcript.lines.map(\.end).max() ?? 0)
+        suppressInterim = [.me, .them]
+        drafting.values.forEach { $0.cancel() }; drafting = [:]; pendingAnswers = [:]; preparationIDs = [:]
+        autoAnswers = AutoAnswerPolicy()
+        topics = []; transcript = TranscriptBuffer(); sessionLines = []
+        volatile = [:]; volatileUpdatedAt = [:]
+        base.dismiss()
+        session?.resetContext(after: contextBoundary)
     }
 
     /// ⌘⇧X while not listening: the cases go too.
@@ -406,9 +423,12 @@ final class ListeningController: ObservableObject {
             if isSpeaking { speaking.insert(speaker) }
             else { speaking.remove(speaker); flushPendingAnswers() }
         case let .volatile(speaker, text):
+            guard !suppressInterim.contains(speaker) else { return }
             volatile[speaker] = text
             volatileUpdatedAt[speaker] = text.isEmpty ? nil : Self.uptime
         case let .line(line, _, _):
+            guard line.start > contextBoundary else { return }
+            suppressInterim.remove(line.speaker)
             volatile[line.speaker] = nil; volatileUpdatedAt[line.speaker] = nil
             idle.heard(at: Self.uptime)
             armIdleStop()
@@ -416,9 +436,11 @@ final class ListeningController: ObservableObject {
             sessionLines.append(line)
             transcript.prune(now: ProcessInfo.processInfo.systemUptime - startedAt)
         case let .turn(turn):
+            guard turn.start > contextBoundary else { return }
             // The others asked something: a personal question gets its fiche now, before any LLM.
             if turn.speaker == .them { base.route(turn.text) }
         case let .topics(update):
+            guard update.contextBoundary == contextBoundary else { return }
             topics = update.topics
             if update.turn != nil {
                 segmenterStatus = String(format: "%@ · last decision in %.0f ms", update.source, update.latency * 1000)

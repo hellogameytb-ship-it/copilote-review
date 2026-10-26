@@ -99,6 +99,7 @@ enum DiagnosticRecette {
                 await DiagnosticAnchorFixture.run(folder: folder, overlay: overlay, settings: settings, assist: assist, session: session, listening: listening, menu: menu, mainWindow: mainWindow, record: record)
                 await DiagnosticStealthConfirmation.run(folder:folder,overlay:overlay,settings:settings,listening:listening,assist:assist,session:session,mainWindow:mainWindow,record:record)
                 await DiagnosticAnswerNow.run(folder:folder,overlay:overlay,settings:settings,listening:listening,assist:assist,session:session,provider:fake,record:record)
+                await DiagnosticChat.run(folder:folder,overlay:overlay,settings:settings,listening:listening,assist:assist,session:session,provider:fake,record:record)
                 defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
             }
             if args.contains("-RecetteFileBrowserOnly") {

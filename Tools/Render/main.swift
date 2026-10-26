@@ -67,7 +67,7 @@ final class AnswerSnapshot: NSObject, WKNavigationDelegate {
         try await Task.sleep(for: .milliseconds(900))
         if let lead {
             let size = try await view.evaluateJavaScript(
-                "(() => { const p = document.querySelector('#answer > :first-child > p:first-child'); return p ? getComputedStyle(p).fontSize : 'none'; })()"
+                "(() => { const p = document.querySelector('.chat-response > :first-child > p:first-child'); return p ? getComputedStyle(p).fontSize : 'none'; })()"
             ) as? String
             guard size == (lead ? "15px" : "none") else {
                 throw RenderCheckFailed(description: "chapeau de la réponse : \(size ?? "?"), attendu \(lead ? "15px" : "aucun")")

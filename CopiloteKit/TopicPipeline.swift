@@ -11,6 +11,7 @@ public struct TopicUpdate: Sendable {
     public let latency: TimeInterval
     /// False for the instant keyword case the model will still correct.
     public let isFinal: Bool
+    public var contextBoundary: TimeInterval = -.infinity
 }
 
 /// Turns of the others → topic decisions → the 4-case board, with the transcript kept for context.
@@ -30,6 +31,7 @@ public actor TopicPipeline {
     private var pending: [Pending] = []
     private var modelQueue: Task<Void, Never>?
     private var nextSequence = 0
+    private var contextBoundary: TimeInterval = -.infinity
 
     private struct Pending {
         let sequence: Int
@@ -52,14 +54,22 @@ public actor TopicPipeline {
         self.onUpdate = onUpdate
     }
 
+    public func resetContext(after boundary: TimeInterval) {
+        contextBoundary = boundary
+        modelQueue?.cancel(); modelQueue = nil; pending = []
+        board = TopicBoard(); transcript = TranscriptBuffer()
+        // Sequence IDs never rewind: a noncooperative old decision cannot match a new turn.
+    }
+
     public func add(_ line: TranscriptLine) {
+        guard line.start > contextBoundary else { return }
         transcript.append(line)
     }
 
     /// Only the others' turns open or continue topics. Returns once the instant case is shown;
     /// callers await each turn (`ListeningSession` does), so turns are decided in order.
     public func handle(_ turn: Turn) async {
-        guard turn.speaker == .them else { return }
+        guard turn.speaker == .them, turn.start > contextBoundary else { return }
         for request in InterviewerRequests.turns(in: turn) { await handleRequest(request) }
     }
 
@@ -98,7 +108,7 @@ public actor TopicPipeline {
 
     public func togglePin(id: String) {
         board.togglePin(id: id)
-        onUpdate(TopicUpdate(topics: board.topics, change: .pinned(id: id), turn: nil, source: "", latency: 0, isFinal: true))
+        onUpdate(TopicUpdate(topics: board.topics, change: .pinned(id: id), turn: nil, source: "", latency: 0, isFinal: true, contextBoundary: contextBoundary))
     }
 
     /// The last `seconds` of the conversation, both speakers.
@@ -197,7 +207,7 @@ public actor TopicPipeline {
     }
 
     private func publish(_ change: TopicChange, turn: Turn, source: String, started: TimeInterval, isFinal: Bool) {
-        onUpdate(TopicUpdate(topics: board.topics, change: change, turn: turn, source: source, latency: Self.now - started, isFinal: isFinal))
+        onUpdate(TopicUpdate(topics: board.topics, change: change, turn: turn, source: source, latency: Self.now - started, isFinal: isFinal, contextBoundary: contextBoundary))
     }
 
     private static var now: TimeInterval { ProcessInfo.processInfo.systemUptime }

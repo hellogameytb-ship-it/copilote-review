@@ -11,6 +11,7 @@ public final class ListeningSession: Sendable {
     private enum PipelineInput: Sendable {
         case line(TranscriptLine)
         case turn(Turn)
+        case reset(TimeInterval)
     }
 
     public init(
@@ -29,6 +30,7 @@ public final class ListeningSession: Sendable {
                 switch item {
                 case let .line(line): await pipeline.add(line)
                 case let .turn(turn): await pipeline.handle(turn)
+                case let .reset(boundary): await pipeline.resetContext(after: boundary)
                 }
             }
         }
@@ -43,6 +45,8 @@ public final class ListeningSession: Sendable {
             }
         }
     }
+
+    public func resetContext(after boundary: TimeInterval) { pipelineInput.yield(.reset(boundary)) }
 
     public func append(_ buffer: AVAudioPCMBuffer, from speaker: Speaker) {
         channels.first { $0.speaker == speaker }?.append(buffer)

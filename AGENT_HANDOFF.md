@@ -1,3 +1,21 @@
+# Current update — build 19 installed and verified
+
+The reader is now a chronological chat: manual Ask/Answer requests retain their actual question and response; streaming updates only that entry. Explicit topic-card navigation can add/select its cached response. Scrolling up stays anchored while newer content arrives; Latest returns to the bottom. Copy belongs to each entry. Retry is available only for the selected failed request and validates its ID.
+
+Clear chat uses inline confirmation (also through the existing clear shortcut). It cancels requests and lookups, clears rendered exchanges and their model context, and sets a boundary for subsequent audio context without stopping capture. Late pre-boundary transcripts, topic decisions and answer callbacks are rejected. Profiles, allowed notes, pending screenshots and screenshot exclusion choices are preserved. Previously saved sessions on disk are not deleted. The first interim speech after reset is suppressed until a new finalized phrase establishes post-reset context.
+
+Previous exchanges sent to the model are bounded to six pairs and 12,000 characters; this is NOT a total context budget. Audio transcript, profile and other context are separate. Visible chat remains available until clearing. Fresh Answer behavior from build18 is preserved.
+
+Validation: 329 framework tests; 1,199 native fixture checks including 23 chat and 18 fresh-Answer checks; 613 geometry samples with no required-origin movement. Narrow/wide/confirmation renders inspected. Initial native fixture failures involved hidden-render refresh scheduling and incorrect confirmation invocation; logs retained, final exact candidate passes. Parent found and requested the old-row Retry correction, then verified its tests and implementation.
+
+Installation: build18 backed up; listening checked stopped before replacement. Build19 started hidden without taking focus. Existing notes, preferences and active private profile preserved. Installed hash and signature independently rechecked. Test/backup app bundles are archived to avoid Spotlight duplicates.
+
+Exact binary SHA-256: eb967fb725a3b2a6aad1ac6c17a3061aef678bf20db7e1642a41304841ae7c1e. Signature independently verified. Synthetic provider/transcripts/images only: no live AI, real audio, desktop capture, physical clicks or global keyboard delivery tested. Sanitized export is not independently rebuilt. No private profile or vault data is included. Capture invisibility remains unguaranteed.
+
+---
+
+Historical updates below are superseded by build19 where applicable.
+
 # Current update — build 18 installed and verified
 
 Answer and its existing shortcut now create a fresh response from speech frozen at the click, independently of selected cards and their cached answers. The last finalized phrases and recent provisional transcription are emphasized, with five minutes of preceding speech and cumulative included session context. Provisional text is labeled, expires, and is removed when finalized. No usable speech produces an inline message instead of replaying a card.

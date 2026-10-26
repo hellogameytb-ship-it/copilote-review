@@ -14,6 +14,15 @@
   <script src="vendor/highlight.min.js"></script>
 </head>
 <body>
+  <header id="chat-controls">
+    <div class="chat-toolbar"><span>Conversation</span><button id="clear-chat" class="copy" type="button">Clear chat</button></div>
+    <div id="clear-confirmation" hidden>
+      <p>Clear this chat and reset the conversation context? Earlier speech and replies will no longer be sent. Listening, profile, notes and pending screenshots stay. Saved history is not deleted.</p>
+      <button id="cancel-clear" class="copy" type="button">Cancel</button>
+      <button id="confirm-clear" class="copy" type="button">Clear chat &amp; context</button>
+    </div>
+    <p id="reset-notice" hidden>Context reset. Continue with a new phrase or Ask. Saved history is unchanged.</p>
+  </header>
   <main id="scroller">
     <div id="empty" class="empty">
       <p class="empty-title">Ready.</p>
@@ -29,6 +38,7 @@
     <div id="answer-tools" class="answer-tools" hidden><button class="copy" type="button">Copy answer</button></div>
     <div id="notice" class="notice" hidden></div>
   </main>
+  <button id="latest" class="copy" type="button" hidden>New activity · Latest ↓</button>
   <script src="overlay.js"></script>
 </body>
 </html>

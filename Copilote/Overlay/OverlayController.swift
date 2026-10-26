@@ -249,6 +249,7 @@ final class OverlayController {
     }
 
     func hide() {
+        webView.cancelClearChat()
         if model.isUnfolded { savedExpandedGeometry = (pill.frame, panel.frame) }
         WindowPrivacy.suspend()
         if model.machine.presentation != .hidden { handle(.toggleVisibility) }
@@ -322,6 +323,7 @@ final class OverlayController {
     }
 
     private func panelLostKeyboard() {
+        webView.cancelClearChat()
         guard model.isTyping, !panel.isKeyWindow else { return }
         previousApp = nil
         panel.allowsKey = false
@@ -505,10 +507,16 @@ final class OverlayController {
     }
 
     /// « Réessayer » under a failed answer.
-    var onRetry: (() -> Void)? {
+    var onRetry: ((Int) -> Void)? {
         get { webView.onRetry }
         set { webView.onRetry = newValue }
     }
+
+    var onClearChat: (() -> Void)? {
+        get { webView.onClearChat }
+        set { webView.onClearChat = newValue }
+    }
+    func requestClearChat() { webView.requestClearChat() }
 
     func resetAnswer() {
         webView.reset()

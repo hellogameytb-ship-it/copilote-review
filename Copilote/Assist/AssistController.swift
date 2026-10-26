@@ -19,6 +19,7 @@ final class AssistController: ObservableObject {
     /// The last "Que dire", read back into its sentence and follow-ups.
     @Published private(set) var whatToSay: WhatToSay?
 
+    var onChatCleared: (() -> Void)?
     weak var listening: ListeningController?
     private let session: SessionController
     private let base: BaseController
@@ -50,6 +51,16 @@ final class AssistController: ObservableObject {
 
     func observe(_ listening: ListeningController) {
         self.listening = listening
+        session.onClearChat = { [weak self] in
+            guard let self else { return }
+            self.extractsTask?.cancel()
+            self.target = nil; self.extracts = []; self.format = nil
+            self.context.refresh(lines: [], captures: self.session.stackImages, extracts: [])
+            self.askText = ""; self.whatToSay = nil
+            self.listening?.resetChatContext()
+            self.onChatCleared?()
+            self.refresh()
+        }
         session.conversationLines = { [weak listening] in listening?.transcript.lines ?? [] }
         listening.$transcript
             .throttle(for: .seconds(1), scheduler: RunLoop.main, latest: true)

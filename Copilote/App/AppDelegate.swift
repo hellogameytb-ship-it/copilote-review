@@ -55,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         session.$answerPhase.removeDuplicates().sink { [weak self] in self?.base.followAnswer($0) }.store(in: &subscriptions)
         assist = AssistController(settings: settings, session: session, base: base, overlay: overlay)
         assist.observe(listening)
+        assist.onChatCleared = { [weak self] in self?.lastSessionLines = [] }
         listening.onTopicChosen = { [weak self] in self?.assist.answer($0) }
         // The actions (Que dire, Notes) apply to the case whose answer drafted itself.
         listening.onAutomaticAnswer = { [weak self] topic in
@@ -212,8 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (.sendCaptures, { [weak self] in self?.session.sendCaptures() }),
             (.sendClipboard, { [weak self] in self?.session.sendClipboard() }),
             (.clearContext, { [weak self] in
-                self?.session.clear()
-                self?.listening.clearIfIdle()
+                self?.session.requestClearChat()
             }),
             (.scrollUp, { [overlay] in overlay.scroll(-1) }),
             (.scrollDown, { [overlay] in overlay.scroll(1) }),

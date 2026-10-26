@@ -60,7 +60,7 @@ targets:
         CFBundleName: Copilote
         CFBundleDisplayName: Copilote
         CFBundleShortVersionString: "0.1.1"
-        CFBundleVersion: "18"
+        CFBundleVersion: "19"
         LSApplicationCategoryType: public.app-category.productivity
         # Starts as an agent (.accessory): launched from a full-screen Space, it never takes the user
         # to another Space; the Dock icon comes only with the stealth mode off.

@@ -13,7 +13,8 @@ final class ResponseWebView: NSView, WKNavigationDelegate {
     private var pendingScripts: [String] = []
     private var lastRenderScript: String?
     private var lastHintsScript: String?
-    var onRetry: (() -> Void)?
+    var onClearChat: (() -> Void)?
+    var onRetry: ((Int) -> Void)?
     var onCopy: (String) -> Void = { Clipboard.copy($0) }
     var pageZoom: Double = 1 {
         didSet { run("document.documentElement.style.zoom = \(pageZoom)", replacingPendingRender: false) }
@@ -58,7 +59,9 @@ final class ResponseWebView: NSView, WKNavigationDelegate {
     override func quickLook(with event: NSEvent) {}
 
     func render(payloadJSON: String) {
-        let script = "window.copilote.render(\(payloadJSON))"
+        // Off-screen fixtures have no display refresh; exercise the same renderer synchronously.
+        let immediate = DiagnosticAnchorFixture.isRequested && ProcessInfo.processInfo.environment["COPILOTE_HEADLESS_GEOMETRY"] == "1"
+        let script = "window.copilote.render(\(payloadJSON), \(immediate ? "true" : "false"))"
         lastRenderScript = script
         run(script, replacingPendingRender: true)
     }
@@ -67,6 +70,8 @@ final class ResponseWebView: NSView, WKNavigationDelegate {
         let script = "window.copilote.setHints(\(json))"
         lastHintsScript = script; run(script, replacingPendingRender: false)
     }
+    func requestClearChat() { run("window.copilote.requestClearChat()", replacingPendingRender: false) }
+    func cancelClearChat() { run("window.copilote.cancelClearChat()", replacingPendingRender: false) }
     func scrollPage(_ direction: Int) { run("window.copilote.scrollPage(\(direction))", replacingPendingRender: false) }
 
     private func run(_ script: String, replacingPendingRender: Bool) {
@@ -113,7 +118,8 @@ final class ResponseWebView: NSView, WKNavigationDelegate {
             let scripts = pendingScripts; pendingScripts.removeAll()
             scripts.forEach { evaluateJavaScript($0, completionHandler: nil) }
         case "copy": if let text = body["text"] as? String { onCopy(text) }
-        case "retry": onRetry?()
+        case "retry": if let id = body["requestID"] as? Int { onRetry?(id) }
+        case "clearChat": onClearChat?()
         case "openSource":
             if let text = body["url"] as? String, let url = URL(string: text), url.scheme == "https", url.host != nil, url.user == nil { NSWorkspace.shared.open(url) }
         default: break
