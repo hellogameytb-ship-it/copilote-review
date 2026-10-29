@@ -22,6 +22,15 @@ struct FinishedAnswer: Equatable {
 /// themselves for case 1), history.
 @MainActor
 final class SessionController: ObservableObject {
+    @Published var latestProviderDiagnostic: CodexRequestDiagnostic?
+    func copyProviderDiagnostics() {
+        var text=providers.diagnosticHistory.text
+        if let event=latestProviderDiagnostic,!providers.diagnosticHistory.entries.contains(where:{$0.id == event.id}) {
+            text=event.summary+"\n"+text
+        }
+        Clipboard.copy(text)
+    }
+
     @Published private(set) var history: [HistoryEntry] = []
     /// The topic whose answer is on screen, highlighted in its case.
     @Published private(set) var answeringTopicID: String?
@@ -73,6 +82,7 @@ final class SessionController: ObservableObject {
     private var navigationSerial = 0
     private var navigationID: Int?
     var onClearChat: (() -> Void)?
+    var onFailedTypedRequest: ((String) -> Void)?
 
     private var renderScheduled = false
 
@@ -130,6 +140,10 @@ final class SessionController: ObservableObject {
         self.capturer = capturer
         overlay.setCounter(stack.summary)
         refreshShortcutHints()
+        providers.onDiagnosticError = { [weak self] event in
+            guard let self,self.latestProviderDiagnostic.map({ $0.timestamp <= event.timestamp }) ?? true else { return }
+            self.latestProviderDiagnostic=event
+        }
         overlay.onRetry = { [weak self] id in self?.retry(expectedID: id) }
         overlay.onClearChat = { [weak self] in self?.clearChat() }
     }
@@ -460,6 +474,12 @@ final class SessionController: ObservableObject {
         let personalNotes = stickyNotes.includedContext
         let priorTyped = typedRequests.filter { $0.scope == settings.interviewScope }.suffix(4).map { String($0.text.prefix(1000)) }
         if case let .assist(question) = input, question.typed, let text = question.question { typedRequests.append((settings.interviewScope, text)); typedRequests = Array(typedRequests.suffix(6)) }
+        let work:CodexWork = {
+            if isAutomatic { return .automaticAnswer }
+            guard case let .assist(question)=input else { return .manual }
+            if question.typed { return .ask }
+            switch question.action { case .answer:return .manual;case .notes:return .notes;case .whatToSay:return .shortAnswer;case .questions:return .followUps }
+        }()
         let requestID = request.id
         request.task = Task { [weak self] in
             do {
@@ -486,8 +506,10 @@ final class SessionController: ObservableObject {
                 try Task.checkCancellation()
                 self?.request(requestID)?.input = prepared
                 draft.appendUser(prepared)
-                let completed = try await provider.streamAnswer(to: draft) { [weak self] text in
-                    await self?.receive(text, requestID: requestID)
+                let completed = try await CodexRequestContext.$work.withValue(work) {
+                    try await provider.streamAnswer(to:draft) { [weak self] text in
+                        await self?.receive(text,requestID:requestID)
+                    }
                 }
                 self?.complete(requestID, with: completed)
             } catch {
@@ -505,7 +527,7 @@ final class SessionController: ObservableObject {
     private func show(_ request: AnswerRequest) {
         if !chat.contains(where: { $0 === request }) { chat.append(request) }
         // Selection changes only the reader; other subjects keep streaming independently.
-        if !request.isFinal { lastFinished = nil }
+        // The previous successful answer remains available while the next one is pending/fails.
         shown = request
         if let topic = request.topic { updatedTopicIDs.remove(topic.id) }
         answeringTopicID = request.topic?.id
@@ -527,7 +549,7 @@ final class SessionController: ObservableObject {
     }
 
     private func receive(_ text: String, requestID: Int) {
-        guard let request = request(requestID) else { return }
+        guard let request = request(requestID), !request.isFinal, !request.wasCancelled else { return }
         if request.text.isEmpty { request.firstTokenLatency = Date().timeIntervalSince(request.started) }
         request.text += text
         if let topic = request.topic { cardAnswers[topic.id] = request.text }
@@ -539,7 +561,7 @@ final class SessionController: ObservableObject {
     }
 
     private func complete(_ requestID: Int, with message: CompletedMessage) {
-        guard let request = request(requestID) else { return }
+        guard let request = request(requestID), !request.isFinal else { return }
         request.isFinal = true
         request.content = message.content
         switch message.stopReason {
@@ -556,9 +578,15 @@ final class SessionController: ObservableObject {
     }
 
     private func fail(_ requestID: Int, with error: Error) {
-        guard let request = request(requestID) else { return }
+        guard let request = request(requestID), !request.isFinal else { return }
         request.isFinal = true
-        request.failure = Self.describe(error)
+        if error is CancellationError {
+            request.wasCancelled=true
+            request.failure="Cancelled · superseded or interrupted before completion"
+        } else {
+            request.failure = Self.describe(error)
+            if case let .assist(question)=request.input,question.typed,let text=question.question { onFailedTypedRequest?(text) }
+        }
         finish(request)
     }
 

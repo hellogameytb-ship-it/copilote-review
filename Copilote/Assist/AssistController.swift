@@ -37,6 +37,10 @@ final class AssistController: ObservableObject {
         self.base = base
         self.overlay = overlay
         session.mode = mode
+        session.onFailedTypedRequest = { [weak self] text in
+            guard let self,self.askText.isEmpty else { return }
+            self.askText=text
+        }
         session.$lastFinished
             .sink { [weak self] finished in
                 guard let self else { return }
@@ -115,15 +119,16 @@ final class AssistController: ObservableObject {
         let interim = listening?.recentProvisionalSpeech() ?? []
         target = nil
         overlay.reveal()
-        guard let snapshot = LiveAnswerSnapshot(lines: lines, context: frozenContext, provisional: interim) else {
+        guard let snapshot = LiveAnswerSnapshot(lines: lines, context: frozenContext, provisional: interim, capturedAt: listening?.answerSnapshotTime()) else {
             session.noSpeechToAnswer()
             return
         }
         var question = AssistQuestion(action: .answer, mode: mode, question: snapshot.focusText, heard: [],
-                                      context: frozenContext, format: AnswerFormat(question: snapshot.focusText))
+                                      context: frozenContext)
         question.liveSnapshot = snapshot
-        let heard = snapshot.latestLines.map(\.text) + snapshot.provisional.map(\.text)
-        let plan = base.snapshotPlan(heard: heard, conversation: snapshot.recentLines)
+        // A single complete working exchange also prevents the base plan's suffix(2) from
+        // reducing a fragmented question to its closing acknowledgement.
+        let plan = base.snapshotPlan(heard: [snapshot.focusText], conversation: snapshot.recentLines)
         session.assist(question, label: "Answer · latest speech", topic: nil, plan: plan)
     }
 

@@ -4,7 +4,7 @@ import Foundation
 public struct CodexTurn: Equatable, Sendable {
     private var streamed = ""
     private var completed: String?
-    private var failure: String?
+    private var failure: CodexFailure?
     private var isFinished = false
 
     public init() {}
@@ -18,10 +18,13 @@ public struct CodexTurn: Equatable, Sendable {
         case let .agentMessageCompleted(_, text):
             completed = text
         case let .error(_, message, willRetry):
-            if !willRetry { failure = message }
+            if !willRetry { failure = CodexFailure(message: message) }
         case let .turnCompleted(_, turnFailure):
-            failure = turnFailure ?? failure
+            failure = turnFailure.map { CodexFailure(message: $0) } ?? failure
             isFinished = true
+        case let .providerFailure(_, _, error, retrying, terminal):
+            if !retrying { failure=error }
+            if terminal { isFinished=true }
         case .response, .responseError, .serverRequest, .other:
             break
         }
@@ -32,7 +35,7 @@ public struct CodexTurn: Equatable, Sendable {
     /// attempt streams its text again).
     public var result: Result<String, CodexFailure>? {
         guard isFinished else { return nil }
-        if let failure { return .failure(CodexFailure(message: failure)) }
+        if let failure { return .failure(failure) }
         return .success(completed ?? streamed)
     }
 }

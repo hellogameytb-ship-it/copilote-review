@@ -47,6 +47,20 @@ struct OverlayBody: View {
                 Spacer()
                 Button(settings.infosysInterviewActive ? "Return to Normal" : "Infosys — Technical interview") { settings.infosysInterviewActive.toggle() }.buttonStyle(.plain)
             }.padding(.horizontal, 12).padding(.vertical, 5)
+            if let event=session.latestProviderDiagnostic {
+                VStack(alignment:.leading,spacing:3) {
+                    HStack {
+                        Text(event.timestamp,style:.time)
+                        Text(event.action + " · " + (event.statusCode.map { "HTTP \($0)" } ?? event.category ?? "Provider error"))
+                        Spacer()
+                        Button("Copy details",action:session.copyProviderDiagnostics)
+                        Button("Dismiss") { session.latestProviderDiagnostic=nil }
+                    }
+                    Text(event.category == "rateLimit" ? "Requests paused. Retry after the indicated wait; the service did not confirm the precise limit." : "Request interrupted. Details are available in Settings → Request diagnostics.")
+                    if let seconds=event.retryAfterSeconds { Text("Wait at least \(String(format:"%.0f",ceil(seconds))) seconds from this timestamp. This request will not be resent automatically.") }
+                }.font(.system(size:10)).buttonStyle(.plain).padding(.horizontal,10).padding(.vertical,5)
+                    .background(FicheStyle.danger.opacity(0.12))
+            }
             TopicCasesView(listening: listening, session: session, selectedID: session.answeringTopicID)
             ScreenshotStackView(session: session)
             ReadingArea(view: webView)

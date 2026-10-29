@@ -75,6 +75,11 @@ if paste_file.exists():
     paste = json.loads(paste_file.read_text())
     summary['pasteChecks'] = len(paste['checks'])
     summary['pasteFailures'] = [row['name'] for row in paste['checks'] if not row['passed']]
+reliability_file = output / 'request-reliability.json'
+if reliability_file.exists():
+    reliability = json.loads(reliability_file.read_text())
+    summary['requestReliabilityChecks'] = len(reliability['checks'])
+    summary['requestReliabilityFailures'] = [row['name'] for row in reliability['checks'] if not row['passed']]
 (output / 'summary.json').write_text(json.dumps(summary, indent=2))
 print(json.dumps(summary, indent=2))
 assert not failures, 'Headless geometry regression failed'

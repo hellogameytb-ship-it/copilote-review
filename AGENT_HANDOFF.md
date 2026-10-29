@@ -1,3 +1,17 @@
+# Current update — build 22: Answer context and request reliability
+
+Answer now freezes the full two-minute conversation at the click, without a three-fragment limit. The preceding two-to-five-minute band completes long statements; older session material supplies relevant background without duplication. Recent substantive questions take priority over old topics; acknowledgements and short follow-ups retain their context. No extra model call is used to select context. Exclusions, Clear chat boundaries, private profile isolation and fresh-response behavior remain intact.
+
+Codex work uses one shared bounded queue with manual priority, background coalescing, spacing and expiry. Observable 429 errors trigger shared cooldown respecting supplied delays, without automatic replay or account/provider switching. Cancellation waits for terminal confirmation; an unresponsive owned transport is quarantined. Previous answers and newer drafts survive failures. Redacted local diagnostics retain timing, action, recognized error metadata and correlation IDs, not prompts or personal content. These changes cannot prevent all service-side rate limits.
+
+Validation of the exact private candidate: 360 framework tests and 1,255 native fixture checks, including 26 Answer, 18 reliability, 30 paste and 23 chat checks. 613 geometry samples and 17 window-policy probes passed. Synthetic provider/transport/audio text only; no live AI, real microphone, desktop capture or physical keyboard test. Prompt transport is verified; model interpretation is not guaranteed. Sanitized export is not independently rebuilt.
+
+Candidate binary SHA-256: cb534fd08c425661b5438b2eef537ca60fd44d6704136576acea1ac831b26dc3. Installation verification is pending at this export. No private interview material, profile, notes, credentials or original Git history is included. Preserve existing privacy gates and avoid private capture APIs; universal capture invisibility is not promised.
+
+---
+
+Earlier updates below are historical and superseded where applicable.
+
 # Current update — build 20 image paste
 
 Command-V in the Ask composer now adds copied images to the existing preview stack without sending a request. The draft, selection and local focus are retained. Ordinary text uses native selection replacement and updates the SwiftUI binding. Text URLs remain text and are never downloaded.

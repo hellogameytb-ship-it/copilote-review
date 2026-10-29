@@ -12,6 +12,7 @@ public enum CodexMessage: Equatable, Sendable {
     /// `failure` is nil when the turn completed normally.
     case turnCompleted(threadID: String, failure: String?)
     case error(threadID: String, message: String, willRetry: Bool)
+    case providerFailure(threadID: String?, rpcID: Int?, failure: CodexFailure, retrying: Bool, terminal: Bool = false)
     case other(method: String?)
 
     public init(line: String) {
@@ -24,7 +25,9 @@ public enum CodexMessage: Equatable, Sendable {
             if let method = json["method"]?.stringValue {
                 self = .serverRequest(id: id, method: method)
             } else if let id = id.intValue, let error = json["error"] {
-                self = .responseError(id: id, message: error["message"]?.stringValue ?? "erreur inconnue")
+                let failure=CodexFailure.from(error)
+                if failure.statusCode != nil || failure.retryAfter != nil || failure.providerCode != nil || failure.rpcCode != nil { self = .providerFailure(threadID:nil,rpcID:id,failure:failure,retrying:false) }
+                else { self = .responseError(id:id,message:failure.message) }
             } else if let id = id.intValue {
                 self = .response(id: id, result: json["result"] ?? .null)
             } else {
@@ -40,11 +43,21 @@ public enum CodexMessage: Equatable, Sendable {
         case "turn/completed":
             let turn = params?["turn"]
             let failed = turn?["status"]?.stringValue == "failed"
+            if failed {
+                let failure=CodexFailure.from(turn?["error"])
+                if failure.statusCode != nil || failure.retryAfter != nil || failure.providerCode != nil || failure.rpcCode != nil {
+                    self = .providerFailure(threadID:params?["threadId"]?.stringValue,rpcID:nil,failure:failure,retrying:false,terminal:true); return
+                }
+            }
             self = .turnCompleted(
                 threadID: params?["threadId"]?.stringValue ?? "",
                 failure: failed ? Self.readableMessage(turn?["error"]?["message"]?.stringValue) : nil
             )
         case "error":
+            let failure=CodexFailure.from(params?["error"])
+            if failure.statusCode != nil || failure.retryAfter != nil || failure.providerCode != nil || failure.rpcCode != nil {
+                self = .providerFailure(threadID:params?["threadId"]?.stringValue,rpcID:nil,failure:failure,retrying:params?["willRetry"] == .bool(true)); return
+            }
             self = .error(
                 threadID: params?["threadId"]?.stringValue ?? "",
                 message: Self.readableMessage(params?["error"]?["message"]?.stringValue),

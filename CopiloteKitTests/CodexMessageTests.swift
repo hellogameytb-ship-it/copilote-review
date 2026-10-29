@@ -22,14 +22,14 @@ final class CodexMessageTests: XCTestCase {
         XCTAssertEqual(CodexMessage(line: CodexFixtures.turnCompleted), .turnCompleted(threadID: "th-1", failure: nil))
         XCTAssertEqual(
             CodexMessage(line: CodexFixtures.turnFailed),
-            .turnCompleted(threadID: "th-2", failure: "The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.")
+            .providerFailure(threadID:"th-2",rpcID:nil,failure:CodexFailure(message:"The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.",statusCode:400,providerCode:"other"),retrying:false,terminal:true)
         )
     }
 
     func test_readsErrorNotifications_andWhetherCodexRetriesOnItsOwn() {
         XCTAssertEqual(
             CodexMessage(line: CodexFixtures.errorNotification),
-            .error(threadID: "th-2", message: "The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.", willRetry: false)
+            .providerFailure(threadID:"th-2",rpcID:nil,failure:CodexFailure(message:"The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.",statusCode:400,providerCode:"other"),retrying:false)
         )
     }
 
@@ -41,7 +41,7 @@ final class CodexMessageTests: XCTestCase {
         XCTAssertEqual(result["thread"]?["id"], "th-1")
         XCTAssertEqual(
             CodexMessage(line: #"{"id": 3, "error": {"code": -32600, "message": "Invalid request: unknown field"}}"#),
-            .responseError(id: 3, message: "Invalid request: unknown field")
+            .providerFailure(threadID:nil,rpcID:3,failure:CodexFailure(message:"Invalid request: unknown field",rpcCode:-32600),retrying:false)
         )
     }
 

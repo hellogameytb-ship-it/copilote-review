@@ -1,3 +1,7 @@
+# Build 22 update
+
+Answer uses a two-minute working conversation with earlier context for long questions. Request scheduling, rate-limit cooldown and redacted error diagnostics are included. See [agent handoff](AGENT_HANDOFF.md) for behavior, validation and limits.
+
 # Copilote — source review snapshot
 
 Native macOS conversation assistance in Swift, SwiftUI and AppKit. This sanitized snapshot corresponds to the build 20 source plus isolated capture experiments, replacing the older review snapshot. See [AGENT_HANDOFF.md](AGENT_HANDOFF.md) for changes, architecture, validation and remaining limits.

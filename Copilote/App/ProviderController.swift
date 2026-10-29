@@ -14,6 +14,13 @@ final class ProviderController: ObservableObject {
         case blocked(String)
     }
 
+    @Published private(set) var diagnosticHistory = CodexDiagnosticHistory()
+    var onDiagnosticError: ((CodexRequestDiagnostic) -> Void)?
+    private let diagnosticWriter=DispatchQueue(label:"org.example.copilote.request-diagnostics")
+    private static var diagnosticURL:URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Copilote/Diagnostics/requests.json")
+    }
+
     @Published private(set) var codexState: CodexState = .checking
 
     private let settings: SettingsStore
@@ -32,6 +39,10 @@ final class ProviderController: ObservableObject {
         self.injectedProvider = injectedProvider
         self.observesEnvironment = observesEnvironment
         guard observesEnvironment else { codexState = .notInstalled; return }
+        if let data=try? Data(contentsOf:Self.diagnosticURL),data.count<=512*1024,
+           let old=try? JSONDecoder().decode(CodexDiagnosticHistory.self,from:data) {
+            for event in old.entries.suffix(200) { diagnosticHistory.append(event) }
+        }
         // Leftovers of a run that crashed: Codex's private logs hold request text.
         try? FileManager.default.removeItem(at: CodexAvailability.privateDirectory)
         // Back from `codex login` in a terminal (or an uninstall): look again.
@@ -39,6 +50,20 @@ final class ProviderController: ObservableObject {
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.detectCodex() }
+        }
+    }
+
+    func recordDiagnostic(_ event:CodexRequestDiagnostic) {
+        diagnosticHistory.append(event)
+        if ["failed","provider error","upstream retry"].contains(event.phase),event.category != "cancelled" { onDiagnosticError?(event) }
+        guard observesEnvironment,let data=try? JSONEncoder().encode(diagnosticHistory) else { return }
+        let url=Self.diagnosticURL
+        diagnosticWriter.async {
+            do {
+                try FileManager.default.createDirectory(at:url.deletingLastPathComponent(),withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
+                try data.write(to:url,options:.atomic)
+                try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:url.path)
+            } catch { /* Diagnostics must never interrupt an answer. */ }
         }
     }
 
@@ -62,7 +87,8 @@ final class ProviderController: ObservableObject {
                 codexServer?.terminateNow()
                 codexServer = CodexAppServer(
                     executable: executable, workingDirectory: CodexAvailability.workingDirectory,
-                    privateDirectory: CodexAvailability.privateDirectory, loadUserConfig: { try CodexAvailability.userConfig() }
+                    privateDirectory: CodexAvailability.privateDirectory, loadUserConfig: { try CodexAvailability.userConfig() },
+                    onDiagnostic: { [weak self] event in Task { @MainActor in self?.recordDiagnostic(event) } }
                 )
                 codexExecutable = executable
             }

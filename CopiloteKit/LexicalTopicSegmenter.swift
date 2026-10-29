@@ -2,8 +2,11 @@ import Foundation
 
 /// Decides new / continue / ignore for a turn of the others.
 public protocol TopicSegmenter: Sendable {
+    var coalescesPendingTurns: Bool { get }
     func decide(turn: Turn, topics: [Topic], context: String) async throws -> TopicDecision
 }
+
+extension TopicSegmenter { public var coalescesPendingTurns: Bool { false } }
 
 /// Offline topic segmentation from shared keywords. Less clever than the model,
 /// but needs no network: used without an API key and when the API call fails.

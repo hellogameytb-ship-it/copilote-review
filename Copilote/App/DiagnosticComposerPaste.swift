@@ -56,11 +56,17 @@ enum DiagnosticComposerPaste {
             }
             return NSApp.windows.compactMap(\.contentView).contains(where:contains)
         }
-        let frame=panel.frame, pill=overlay.pillFrame
+        let initialFrame=panel.frame
+        var pasteGeometry:[String:Any]=[:]
         let profile=settings.infosysInterviewContext, active=settings.infosysInterviewActive
         let prefs=settings.answerPreferences, notes=session.stickyNotes.notes, stealth=settings.stealth
         draft("Keep my draft",selection:NSRange(location:5,length:2))
+        // Let the new hosting view establish its intrinsic size before measuring a paste.
+        try? await Task.sleep(for:.milliseconds(40));host.layoutSubtreeIfNeeded()
+        draft("Keep my draft",selection:NSRange(location:5,length:2))
+        let frame=panel.frame,pill=overlay.pillFrame
         let responder=panel.firstResponder
+        check("paste baseline has the native field editor as local responder",responder === editor)
         put(red,text:"IMAGE_METADATA_NOT_A_QUESTION")
         editor.doCommand(by:#selector(NSText.paste(_:)))
         check("image paste queues synchronously without changing draft or selection",session.isPastingImages && assist.askText == "Keep my draft" && editor.string == "Keep my draft" && editor.selectedRange() == NSRange(location:5,length:2))
@@ -77,6 +83,7 @@ enum DiagnosticComposerPaste {
         check("multiple representations on one item produce one image with PNG priority",session.stackImages.count == 3 && session.stackImages.last == redImage)
         put(wide);editor.paste(nil);await settle()
         check("large image uses existing 1600-pixel JPEG pipeline",session.stackImages.last?.pixelWidth == 1600 && session.stackImages.last?.mediaType == "image/jpeg")
+        pasteGeometry=["initialFrame":NSStringFromRect(initialFrame),"baselineFrame":NSStringFromRect(frame),"afterPasteFrame":NSStringFromRect(panel.frame),"sameResponder":panel.firstResponder === responder,"samePill":overlay.pillFrame == pill]
         check("image paste preserves local focus and panel position",panel.firstResponder === responder && panel.frame == frame && overlay.pillFrame == pill)
         draft("abc DEF ghi",selection:NSRange(location:4,length:3))
         board.clearContents();board.setString("é🙂",forType:.string);editor.paste(nil)
@@ -144,7 +151,7 @@ enum DiagnosticComposerPaste {
         check("explicit send still submits previews through the existing path",await provider.conversations.count == 1 && session.stackImages.isEmpty)
         check("quiet editor keeps system text services disabled",!editor.isContinuousSpellCheckingEnabled && !editor.isAutomaticSpellingCorrectionEnabled && !editor.isAutomaticTextCompletionEnabled && !editor.isAutomaticTextReplacementEnabled)
         check("paste fixture never shows a window or takes desktop focus",!NSApp.isActive && NSApp.windows.allSatisfy { !$0.isVisible && !$0.isKeyWindow })
-        try? JSONSerialization.data(withJSONObject:["checks":checks,"isolatedPasteboard":true,"physicalKeyboard":false,"desktopCaptured":false,"audioCaptured":false,"liveAIRequests":0],options:[.prettyPrinted,.sortedKeys]).write(to:folder.appendingPathComponent("paste.json"))
+        try? JSONSerialization.data(withJSONObject:["checks":checks,"geometry":pasteGeometry,"isolatedPasteboard":true,"physicalKeyboard":false,"desktopCaptured":false,"audioCaptured":false,"liveAIRequests":0],options:[.prettyPrinted,.sortedKeys]).write(to:folder.appendingPathComponent("paste.json"))
         _ = panel.makeFirstResponder(nil);panel.close();session.clear();overlay.hide()
     }
 }

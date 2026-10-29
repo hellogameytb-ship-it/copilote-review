@@ -9,10 +9,13 @@ public struct ProvisionalSpeech: Equatable, Sendable {
 /// Immutable speech focus captured by an explicit Answer gesture. Session context stays separate.
 public struct LiveAnswerSnapshot: Equatable, Sendable {
     public let recentLines: [TranscriptLine]
-    public let latestLines: [TranscriptLine]
+    /// All included fragments overlapping the two-minute working window, never a fragment count.
+    public let workingLines: [TranscriptLine]
+    public let capturedAt: TimeInterval
+    public var precedingLines: [TranscriptLine] { recentLines.filter { $0.end < capturedAt - 120 } }
     public let provisional: [ProvisionalSpeech]
 
-    public init?(lines: [TranscriptLine], context: AssistContext, provisional: [ProvisionalSpeech]) {
+    public init?(lines: [TranscriptLine], context: AssistContext, provisional: [ProvisionalSpeech], capturedAt: TimeInterval? = nil) {
         let included = context.includedLines.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let excluded = context.excludedLineTexts
         self.provisional = provisional.filter { fragment in
@@ -23,13 +26,14 @@ public struct LiveAnswerSnapshot: Equatable, Sendable {
             if let last = lines.last(where: { $0.speaker == fragment.speaker }), excluded.contains(last.text) { return false }
             return true
         }
-        let newest = lines.map(\.end).max() ?? 0
-        recentLines = included.filter { $0.end >= newest - 300 }
-        latestLines = Array(recentLines.suffix(3))
-        guard !latestLines.isEmpty || !self.provisional.isEmpty else { return nil }
+        let cutoff = capturedAt ?? lines.map(\.end).max() ?? 0
+        self.capturedAt = cutoff
+        recentLines = included.filter { $0.end >= cutoff - 300 && $0.start <= cutoff }
+        workingLines = recentLines.filter { $0.end >= cutoff - 120 }
+        guard !workingLines.isEmpty || !self.provisional.isEmpty else { return nil }
     }
 
     public var focusText: String {
-        (latestLines.map(\.labeled) + provisional.map { "\($0.speaker.name) (provisional): \($0.text)" }).joined(separator: "\n")
+        (workingLines.map(\.labeled) + provisional.map { "\($0.speaker.name) (provisional): \($0.text)" }).joined(separator: "\n")
     }
 }

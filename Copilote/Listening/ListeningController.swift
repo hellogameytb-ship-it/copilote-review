@@ -33,6 +33,10 @@ final class ListeningController: ObservableObject {
             return ProvisionalSpeech(speaker: speaker, text: text)
         }
     }
+    /// Same monotonic audio clock as Clear chat. Silence must not make old speech recent again.
+    func answerSnapshotTime(at now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> TimeInterval {
+        max(0, now - startedAt, transcript.lines.map(\.end).max() ?? 0)
+    }
     @Published private(set) var speaking: Set<Speaker> = []
     /// Shown in the settings: which segmenter decided last and how fast.
     @Published private(set) var segmenterStatus = ""
@@ -480,6 +484,9 @@ final class ListeningController: ObservableObject {
                 answers?.cancelAutomatic(for: id)
             }
         case let .start(topic):
+            // Only the newest automatic draft is useful; never fan out every pending subject.
+            for task in drafting.values { task.cancel() }
+            drafting.removeAll();preparationIDs.removeAll();pendingAnswers.removeAll()
             drafting.removeValue(forKey: topic.id)?.cancel()
             pendingAnswers[topic.id] = topic
         }

@@ -1,15 +1,5 @@
 import Foundation
 
-public struct CodexFailure: Error, Equatable, Sendable {
-    public let message: String
-
-    public init(message: String) {
-        self.message = message
-    }
-
-    public var userMessage: String { "Codex : \(message)" }
-}
-
 /// One `codex app-server` process kept warm for the whole app: each request opens an ephemeral
 /// thread (see `CodexRPC`), streams the answer, then releases the thread. The ChatGPT login of
 /// the CLI is used as is; no token is read or copied by Copilote.
@@ -22,10 +12,11 @@ public actor CodexAppServer {
         public let outputSchema: JSONValue?
         /// The turn fails after this: a stuck answer must not block its caller.
         public let timeout: Duration
+        public let work: CodexWork
 
         public init(
             model: String, serviceTier: String?, instructions: String, input: [JSONValue],
-            outputSchema: JSONValue? = nil, timeout: Duration = .seconds(120)
+            outputSchema: JSONValue? = nil, timeout: Duration = .seconds(120), work: CodexWork = .manual
         ) {
             self.model = model
             self.serviceTier = serviceTier
@@ -33,12 +24,18 @@ public actor CodexAppServer {
             self.input = input
             self.outputSchema = outputSchema
             self.timeout = timeout
+            self.work = work
         }
     }
 
     private struct Session {
         var turn = CodexTurn()
         var turnID: String?
+        var stoppingError: Error?
+        var expiry: Task<Void, Never>?
+        var interruptionDeadline: Task<Void, Never>?
+        let requestID: UUID
+        let request: TurnRequest
         let onText: @Sendable (String) async -> Void
         let completion: CheckedContinuation<String, Error>
     }
@@ -93,25 +90,56 @@ public actor CodexAppServer {
     private var starting: Task<Void, Error>?
     private var nextID = 0
     private var pending: [Int: CheckedContinuation<JSONValue, Error>] = [:]
+    private var rpcDeadlines: [Int:Task<Void,Never>] = [:]
     private var sessions: [String: Session] = [:]
+    private let scheduler: CodexRequestScheduler
+    private let onDiagnostic: @Sendable (CodexRequestDiagnostic) -> Void
+    private var interruptUnconfirmed = false
 
     /// `loadUserConfig` returns the user's `~/.codex/config.toml`, read at every launch to switch
     /// its MCP servers off; when it throws, Codex is not started.
     public init(
         executable: URL, workingDirectory: URL, privateDirectory: URL,
-        loadUserConfig: @escaping @Sendable () throws -> String?
+        loadUserConfig: @escaping @Sendable () throws -> String?,
+        scheduler: CodexRequestScheduler = CodexRequestScheduler(),
+        onDiagnostic: @escaping @Sendable (CodexRequestDiagnostic) -> Void = { _ in }
     ) {
         self.executable = executable
         self.workingDirectory = workingDirectory
         self.privateDirectory = privateDirectory
         self.loadUserConfig = loadUserConfig
+        self.scheduler = scheduler; self.onDiagnostic = onDiagnostic
     }
 
     // MARK: Turns
 
     /// Streams one answer; returns its final text. Cancelling the calling task interrupts the turn.
     public func run(_ request: TurnRequest, onText: @escaping @Sendable (String) async -> Void) async throws -> String {
+        let id=UUID()
+        record(id,request,"queued")
+        do {
+            let text=try await scheduler.run(work:request.work) {
+                await self.record(id,request,"started")
+                return try await self.runAdmitted(request,id:id,onText:onText)
+            }
+            record(id,request,"completed")
+            return text
+        } catch {
+            record(id,request,error is CancellationError ? "cancelled" : "failed",error:error)
+            throw error
+        }
+    }
+
+    private func record(_ id:UUID,_ request:TurnRequest,_ phase:String,error:Error? = nil,retrying:Bool = false) {
+        onDiagnostic(CodexRequestDiagnostic(requestID:id,work:request.work,model:request.model,phase:phase,error:error,upstreamRetrying:retrying))
+    }
+
+    private func runAdmitted(_ request:TurnRequest,id:UUID,onText:@escaping @Sendable (String) async -> Void) async throws -> String {
+        try Task.checkCancellation()
+        guard !interruptUnconfirmed else { throw CodexFailure(message:"Waiting for the interrupted Codex process to stop.",category:.busy) }
         try await start()
+        try Task.checkCancellation()
+        record(id,request,"thread/start")
         let thread = try await call {
             CodexRPC.threadStart(
                 id: $0, model: request.model, workingDirectory: workingDirectory.path,
@@ -119,14 +147,16 @@ public actor CodexAppServer {
             )
         }
         guard let threadID = thread["thread"]?["id"]?.stringValue else { throw CodexFailure(message: "thread sans identifiant") }
+        if Task.isCancelled { send { CodexRPC.threadUnsubscribe(id:$0,threadID:threadID) }; throw CancellationError() }
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                sessions[threadID] = Session(onText: onText, completion: continuation)
+                sessions[threadID] = Session(requestID:id,request:request,onText:onText,completion:continuation)
                 Task { await self.startTurn(threadID, request) }
-                Task {
-                    try? await Task.sleep(for: request.timeout)
-                    self.abandon(threadID, with: CodexFailure(message: "no response after \(request.timeout.components.seconds) s"))
+                sessions[threadID]?.expiry = Task {
+                    do { try await Task.sleep(for:request.timeout) } catch { return }
+                    self.abandon(threadID,with:CodexFailure(message:"Response timed out",category:.timeout))
                 }
+                if Task.isCancelled { self.abandon(threadID,with:CancellationError()) }
             }
         } onCancel: {
             Task { await self.abandon(threadID, with: CancellationError()) }
@@ -134,33 +164,49 @@ public actor CodexAppServer {
     }
 
     private func startTurn(_ threadID: String, _ request: TurnRequest) async {
+        guard let session=sessions[threadID] else { return }
+        if let error=session.stoppingError { finish(threadID,with:.failure(error));return }
         do {
+            record(session.requestID,request,"turn/start")
             let result = try await call {
                 CodexRPC.turnStart(id: $0, threadID: threadID, input: request.input, effort: "low", outputSchema: request.outputSchema)
             }
             let turnID = result["turn"]?["id"]?.stringValue
             if sessions[threadID] != nil {
                 sessions[threadID]?.turnID = turnID
+                if sessions[threadID]?.stoppingError != nil,let turnID { send { CodexRPC.turnInterrupt(id:$0,threadID:threadID,turnID:turnID) } }
             } else if let turnID {
                 // Abandoned before Codex acknowledged the turn: stop it now.
                 send { CodexRPC.turnInterrupt(id: $0, threadID: threadID, turnID: turnID) }
             }
         } catch {
-            finish(threadID, with: .failure(error))
+            // A lost turn/start acknowledgement may still have started upstream work.
+            if (error as? CodexFailure)?.category == .timeout {
+                interruptUnconfirmed=true
+                connection?.process.terminate()
+            }
+            finish(threadID, with: .failure(sessions[threadID]?.stoppingError ?? error))
         }
     }
 
-    /// Cancelled or timed out: Codex stops generating (no quota spent on an answer nobody reads).
+    /// Interruption is best effort. Keep the scheduler slot until terminal notification;
+    /// if it never arrives, terminate this owned transport and block new work until it exits.
     private func abandon(_ threadID: String, with error: Error) {
-        guard let session = sessions[threadID] else { return }
-        if let turnID = session.turnID {
-            send { CodexRPC.turnInterrupt(id: $0, threadID: threadID, turnID: turnID) }
+        guard let session=sessions[threadID],session.stoppingError == nil else { return }
+        sessions[threadID]?.stoppingError=error
+        if let turnID=session.turnID { send { CodexRPC.turnInterrupt(id:$0,threadID:threadID,turnID:turnID) } }
+        sessions[threadID]?.interruptionDeadline=Task {
+            do { try await Task.sleep(for:.seconds(5)) } catch { return }
+            guard self.sessions[threadID] != nil else { return }
+            self.interruptUnconfirmed=true
+            self.connection?.process.terminate()
+            self.finish(threadID,with:.failure(error))
         }
-        finish(threadID, with: .failure(error))
     }
 
     private func finish(_ threadID: String, with result: Result<String, Error>) {
         guard let session = sessions.removeValue(forKey: threadID) else { return }
+        session.expiry?.cancel(); session.interruptionDeadline?.cancel()
         session.completion.resume(with: result)
         send { CodexRPC.threadUnsubscribe(id: $0, threadID: threadID) }
     }
@@ -169,6 +215,7 @@ public actor CodexAppServer {
 
     /// Starts the process and the handshake once; concurrent and later calls share that start.
     public func start() async throws {
+        guard !interruptUnconfirmed else { throw CodexFailure(message:"Waiting for interrupted transport to exit",category:.busy) }
         if let starting {
             try await starting.value
             if connection?.process.isRunning == true { return }
@@ -253,10 +300,12 @@ public actor CodexAppServer {
     /// Only for the current process: a late handler must not tear down its replacement.
     private func terminated(generation ended: Int) {
         guard ended == generation, connection != nil || starting != nil else { return }
-        let failure = CodexFailure(message: "the Codex process stopped")
+        interruptUnconfirmed=false
+        let failure = CodexFailure(message: "the Codex process stopped",category:.network)
         pending.values.forEach { $0.resume(throwing: failure) }
         pending.removeAll()
-        sessions.values.forEach { $0.completion.resume(throwing: failure) }
+        rpcDeadlines.values.forEach { $0.cancel() };rpcDeadlines.removeAll()
+        sessions.values.forEach { $0.expiry?.cancel();$0.interruptionDeadline?.cancel();$0.completion.resume(throwing:$0.stoppingError ?? failure) }
         sessions.removeAll()
         connection = nil
         starting = nil
@@ -273,8 +322,8 @@ public actor CodexAppServer {
         return try await withCheckedThrowingContinuation { continuation in
             pending[id] = continuation
             connection.write(message(id))
-            Task {
-                try? await Task.sleep(for: timeout)
+            rpcDeadlines[id]=Task {
+                do { try await Task.sleep(for:timeout) } catch { return }
                 self.expire(id)
             }
         }
@@ -287,20 +336,37 @@ public actor CodexAppServer {
     }
 
     private func expire(_ id: Int) {
-        pending.removeValue(forKey: id)?.resume(throwing: CodexFailure(message: "Codex is not responding"))
+        rpcDeadlines.removeValue(forKey:id)?.cancel()
+        pending.removeValue(forKey: id)?.resume(throwing: CodexFailure(message: "Codex is not responding",category:.timeout))
     }
 
     private func handle(_ message: CodexMessage, generation from: Int) async {
         guard from == generation else { return }
         switch message {
         case let .response(id, result):
+            rpcDeadlines.removeValue(forKey:id)?.cancel()
             pending.removeValue(forKey: id)?.resume(returning: result)
         case let .responseError(id, text):
+            rpcDeadlines.removeValue(forKey:id)?.cancel()
             pending.removeValue(forKey: id)?.resume(throwing: CodexFailure(message: text))
+        case let .providerFailure(threadID, rpcID, failure, retrying, terminal):
+            if let rpcID { rpcDeadlines.removeValue(forKey:rpcID)?.cancel();pending.removeValue(forKey:rpcID)?.resume(throwing:failure) }
+            if let threadID,let session=sessions[threadID] {
+                record(session.requestID,session.request,retrying ? "upstream retry" : "provider error",error:failure,retrying:retrying)
+                // A 429 stops upstream retrying at its first observable signal.
+                if terminal { finish(threadID,with:.failure(session.stoppingError ?? failure)) }
+                else if [.rateLimit,.usageLimit,.authentication].contains(failure.category) { abandon(threadID,with:failure) }
+                else if !retrying { abandon(threadID,with:failure) }
+            }
         case let .serverRequest(id, _):
             connection?.write(CodexRPC.refusal(of: id))
         case let .agentDelta(threadID, _), let .agentMessageCompleted(threadID, _),
              let .error(threadID, _, _), let .turnCompleted(threadID, _):
+            if let error=sessions[threadID]?.stoppingError {
+                if case .turnCompleted=message { finish(threadID,with:.failure(error)) }
+                return
+            }
+            if case let .error(_,text,true)=message,let session=sessions[threadID] { record(session.requestID,session.request,"upstream retry",error:CodexFailure(message:text),retrying:true) }
             if let shown = sessions[threadID]?.turn.apply(message), let onText = sessions[threadID]?.onText {
                 await onText(shown)
             }

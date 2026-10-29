@@ -29,7 +29,7 @@ public struct CodexProvider: LLMProvider {
 
     public func streamAnswer(to conversation: Conversation, onText: @escaping @Sendable (String) async -> Void) async throws -> CompletedMessage {
         let request = CodexAppServer.TurnRequest(
-            model: answerModel, serviceTier: serviceTier, instructions: Prompts.system, input: CodexPrompt.turnInput(for: conversation)
+            model: answerModel, serviceTier: serviceTier, instructions: Prompts.system, input: CodexPrompt.turnInput(for: conversation), work: CodexRequestContext.work
         )
         let text = try await server.run(request, onText: onText)
         return CompletedMessage(content: text.isEmpty ? [] : [["type": "text", "text": .string(text)]], stopReason: "end_turn")
@@ -43,7 +43,7 @@ public struct CodexProvider: LLMProvider {
         let input: [JSONValue] = images.map { ["type": "image", "url": .string("data:\($0.mediaType);base64,\($0.data.base64EncodedString())")] }
             + [["type": "text", "text": .string(prompt)]]
         return try await server.run(
-            CodexAppServer.TurnRequest(model: answerModel, serviceTier: serviceTier, instructions: system, input: input, outputSchema: schema)
+            CodexAppServer.TurnRequest(model: answerModel, serviceTier: serviceTier, instructions: system, input: input, outputSchema: schema, work: CodexRequestContext.work == .manual ? .completion : CodexRequestContext.work)
         ) { _ in }
     }
 }
@@ -54,13 +54,15 @@ public struct CodexTopicSegmenter: TopicSegmenter {
     let model: String
     let serviceTier: String?
 
+    public var coalescesPendingTurns: Bool { true }
+
     public func decide(turn: Turn, topics: [Topic], context: String) async throws -> TopicDecision {
         let request = CodexAppServer.TurnRequest(
             model: model, serviceTier: serviceTier, instructions: TopicRequest.system,
             input: [["type": "text", "text": .string(TopicRequest.prompt(turn: turn, topics: topics, context: context))]],
             outputSchema: TopicRequest.schema,
             // A late decision is worthless: the keyword fallback takes over.
-            timeout: .seconds(15)
+            timeout: .seconds(15), work: .grouping
         )
         return try await TopicDecision(decisionText: server.run(request) { _ in })
     }

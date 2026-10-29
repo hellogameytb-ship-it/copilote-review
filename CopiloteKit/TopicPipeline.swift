@@ -31,6 +31,8 @@ public actor TopicPipeline {
     private var pending: [Pending] = []
     private var modelQueue: Task<Void, Never>?
     private var nextSequence = 0
+    private var workerID = UUID()
+    private var activeSequence: Int?
     private var contextBoundary: TimeInterval = -.infinity
 
     private struct Pending {
@@ -56,6 +58,7 @@ public actor TopicPipeline {
 
     public func resetContext(after boundary: TimeInterval) {
         contextBoundary = boundary
+        workerID=UUID();activeSequence=nil
         modelQueue?.cancel(); modelQueue = nil; pending = []
         board = TopicBoard(); transcript = TranscriptBuffer()
         // Sequence IDs never rewind: a noncooperative old decision cannot match a new turn.
@@ -92,10 +95,22 @@ public actor TopicPipeline {
         pending.append(Pending(sequence: sequence, turn: turn, placement: placement, started: started))
         publish(change, turn: turn, source: "lexical", started: started, isFinal: false)
 
-        let previous = modelQueue
-        modelQueue = Task {
-            await previous?.value
-            await self.decideWithModel(sequence)
+        if segmenter?.coalescesPendingTurns == true {
+            let obsolete=pending.filter { $0.sequence != activeSequence && $0.sequence != sequence }
+            pending.removeAll { $0.sequence != activeSequence && $0.sequence != sequence }
+            for item in obsolete {
+                _ = correct(item,with:nil)
+                publish(.ignored,turn:item.turn,source:"lexical (coalesced)",started:item.started,isFinal:true)
+            }
+        }
+        guard modelQueue == nil else { return }
+        let run=workerID
+        modelQueue=Task {
+            while !Task.isCancelled, self.workerID == run, let next=self.pending.first {
+                self.activeSequence=next.sequence
+                await self.decideWithModel(next.sequence)
+            }
+            if self.workerID == run { self.activeSequence=nil;self.modelQueue=nil }
         }
     }
 

@@ -101,6 +101,7 @@ enum DiagnosticRecette {
                 await DiagnosticAnswerNow.run(folder:folder,overlay:overlay,settings:settings,listening:listening,assist:assist,session:session,provider:fake,record:record)
                 await DiagnosticChat.run(folder:folder,overlay:overlay,settings:settings,listening:listening,assist:assist,session:session,provider:fake,record:record)
                 await DiagnosticComposerPaste.run(folder:folder,overlay:overlay,settings:settings,assist:assist,session:session,provider:fake,record:record)
+                await DiagnosticRequestReliability.run(folder:folder,overlay:overlay,settings:settings,listening:listening,assist:assist,session:session,providers:providers,provider:fake,record:record)
                 defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
             }
             if args.contains("-RecetteFileBrowserOnly") {
@@ -375,6 +376,9 @@ actor RecetteProvider: LLMProvider {
     nonisolated var topicSegmenter: any TopicSegmenter { RecetteSegmenter() }
     nonisolated let topicSegmenterName = "recette"
     private var shouldFail = false
+    private var codexFailure: (CodexFailure, Duration)?
+    private(set) var lastWork: CodexWork?
+    func failNext(_ failure:CodexFailure,after delay:Duration = .zero) { codexFailure=(failure,delay) }
     private(set) var conversations: [Conversation] = []
     func resetConversations() { conversations = [] }
     private var nextReply: String?
@@ -389,6 +393,8 @@ actor RecetteProvider: LLMProvider {
     func warmUp() async {}
     func streamAnswer(to conversation: Conversation, onText: @escaping @Sendable (String) async -> Void) async throws -> CompletedMessage {
         conversations.append(conversation)
+        lastWork=CodexRequestContext.work
+        if let (failure,delay)=codexFailure { codexFailure=nil;try await Task.sleep(for:delay);throw failure }
         let reply = nextReply; nextReply = nil
         let late = nonCooperative; nonCooperative = false
         if shouldFail { shouldFail = false; throw NSError(domain: "recette", code: 1, userInfo: [NSLocalizedDescriptionKey: "Erreur fournisseur de recette"]) }

@@ -114,6 +114,44 @@ enum DiagnosticAnswerNow {
         check("rapid clicks keep latest response despite noncooperative late callback",session.lastFinished?.text == "NEW_INTENTION_RESPONSE" && session.answeringTopicID == nil)
         check("newest click takes its own immutable context",(await prompt()).contains("Explain hash tables instead."))
         await reset()
+        let profileContext=settings.infosysInterviewContext, profileActive=settings.infosysInterviewActive
+        let longParts=(0..<10).map { "NINETY_SECOND_PART_\($0)_END: bounded queue constraint" }
+        for (index,text) in longParts.enumerated() { line(text,100+Double(index)*10) }
+        line("What do you think?",195)
+        assist.answerNow();await waitForCount(1)
+        let fullExchange=await prompt()
+        let working=fullExchange.components(separatedBy:"Working conversation — last 120 seconds").last?.components(separatedBy:"Earlier continuation —").first ?? ""
+        check("Answer sends every fragment of a ninety-second question in its primary context",longParts.allSatisfy { working.contains($0) } && working.contains("What do you think?"))
+        check("context selection adds no separate model request",await provider.conversations.count == 1)
+        line("okay",199)
+        assist.answerNow();await waitForCount(2)
+        let acknowledged=await prompt()
+        check("acknowledgement preserves the complete question and starts a fresh answer",await provider.conversations.count == 2 && acknowledged.contains(longParts[0]) && acknowledged.contains("does not replace the question"))
+        let sentPreferences=await provider.conversations.last?.preferences
+        check("working-window Answer preserves active profile and its frozen preferences",settings.infosysInterviewContext == profileContext && settings.infosysInterviewActive == profileActive && provider.kind == .codex && sentPreferences == settings.answerPreferences)
+
+        await reset()
+        let threeMinuteParts=(0...18).map { "THREE_MINUTE_PART_\($0)_END: queue setup" }
+        for (index,text) in threeMinuteParts.enumerated() { line(text,20+Double(index)*10) }
+        assist.answerNow();await waitForCount(1)
+        let extended=await prompt()
+        let continuation=extended.components(separatedBy:"Earlier continuation —").last?.components(separatedBy:"Earlier session background —").first ?? ""
+        check("three-minute statement beginning reaches provider as earlier continuation",threeMinuteParts.allSatisfy { extended.contains($0) } && continuation.contains(threeMinuteParts[0]))
+        line("New topic: explain C++ reference lifetime",205)
+        assist.answerNow();await waitForCount(2)
+        let changed=await prompt()
+        check("new subject is present with explicit priority over older detailed statement",changed.contains("New topic: explain C++ reference lifetime") && changed.contains("newer substantive question takes priority"))
+        assist.refresh()
+        if let item=assist.context.items.first(where: { $0.label.contains(threeMinuteParts[0]) }) { assist.toggle(item.id) }
+        assist.answerNow();await waitForCount(3)
+        check("excluded beginning cannot reenter through long-statement continuation",!(await prompt()).contains(threeMinuteParts[0]))
+        session.clearChat()
+        line("AFTER_RESET_NEW_QUESTION explain a pointer",10000)
+        assist.answerNow();await waitForCount(4)
+        let afterReset=await prompt()
+        check("Clear chat removes all working continuation and older statement context",afterReset.contains("AFTER_RESET_NEW_QUESTION") && !afterReset.contains("THREE_MINUTE_PART_") && !afterReset.contains("New topic: explain C++ reference lifetime"))
+
+        await reset()
         assist.answer(old);await waitForCount(1)
         assist.answerNow();try? await Task.sleep(for:.milliseconds(100))
         check("no speech does not replay old card or call provider",await provider.conversations.count == 1 && session.lastFinished == nil && session.answeringTopicID == nil && !session.isAnswering)

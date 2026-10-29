@@ -34,4 +34,13 @@ final class CodexTurnTests: XCTestCase {
 
         XCTAssertEqual(turn.result, .success("Réponse courte"))
     }
+    func test_structuredTerminalFailureKeepsProviderMetadata() {
+        var turn = CodexTurn()
+        let failure = CodexFailure(message: "limited", category: .rateLimit, statusCode: 429,
+                                   retryAfter: 90, providerCode: "rate_limit_exceeded", rpcCode: -32000)
+        _ = turn.apply(.providerFailure(threadID: "th", rpcID: nil, failure: failure,
+                                       retrying: false, terminal: true))
+        XCTAssertEqual(turn.result, .failure(failure))
+    }
+
 }

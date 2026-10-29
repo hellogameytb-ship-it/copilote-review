@@ -89,6 +89,15 @@ private struct SettingsForm: View {
 
             ProviderSection(settings: settings, providers: providers)
 
+            Section("Request diagnostics") {
+                Text("Last 200 events, stored locally. No questions, answers, transcript or credentials. Times include the local time zone.").font(.caption).foregroundStyle(.secondary)
+                Button("Copy diagnostic details") { Clipboard.copy(providers.diagnosticHistory.text) }
+                    .disabled(providers.diagnosticHistory.entries.isEmpty)
+                ForEach(providers.diagnosticHistory.entries.suffix(12).reversed()) { event in
+                    Text(event.summary).font(.system(size:10,design:.monospaced)).fixedSize(horizontal:false,vertical:true)
+                }
+            }
+
             ListeningSection(settings: settings, listening: listening)
 
             MeetingSettingsSection(settings: settings, onHistoryChange: history.start, onMenuBarChange: onMenuBarChange, onTour: onTour)

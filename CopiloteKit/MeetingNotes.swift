@@ -285,18 +285,18 @@ enum JSONText {
 extension LLMProvider {
     /// The notes of a session through this provider (JSON answer, then checked against the transcript).
     public func meetingNotes(transcript: [TranscriptLine], mode: MeetingMode) async throws -> MeetingNotes {
-        let answer = try await complete(
+        let answer = try await CodexRequestContext.$work.withValue(.notes) { try await complete(
             system: MeetingNotesRequest.system, prompt: MeetingNotesRequest.prompt(transcript: transcript, mode: mode),
             images: [], schema: MeetingNotesRequest.schema
-        )
+        ) }
         return try MeetingNotesRequest.notes(fromJSON: answer, transcript: transcript)
     }
 
     public func selfReview(transcript: [TranscriptLine]) async throws -> SelfReview {
-        let answer = try await complete(
+        let answer = try await CodexRequestContext.$work.withValue(.notes) { try await complete(
             system: SelfReviewRequest.system, prompt: SelfReviewRequest.prompt(transcript: transcript),
             images: [], schema: SelfReviewRequest.schema
-        )
+        ) }
         return try SelfReviewRequest.review(fromJSON: answer, transcript: transcript)
     }
 }
