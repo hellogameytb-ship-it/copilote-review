@@ -39,7 +39,7 @@ public struct AnswerPlan: Equatable, Sendable {
     public var isWorthDrafting: Bool { format.kind != .none }
 
     /// The last two turns heard tell the kind: a follow-up alone ("et pourquoi ?") says too little.
-    public static func make(heard: [String], base: PersonalBase?, conversation: [TranscriptLine] = [], today: CalendarDay = .today()) async -> AnswerPlan {
+    public static func make(heard: [String], base: PersonalBase?, conversation: [TranscriptLine] = [], interviewEvidence: InterviewEvidenceStore? = nil, today: CalendarDay = .today()) async -> AnswerPlan {
         var heard = heard
         let latest = heard.last?.lowercased() ?? ""
         if latest.split(separator: " ").count < 16,
@@ -49,6 +49,19 @@ public struct AnswerPlan: Equatable, Sendable {
         }
         let question = heard.suffix(2).joined(separator: " ")
         let format = AnswerFormat(question: question, today: today)
+        if let interviewEvidence {
+            let current = InterviewEvidenceStore.currentQuestion(heard)
+            let preferred = interviewEvidence.snippets(for: current)
+            if !preferred.isEmpty {
+                let format = AnswerFormat(kind: .personal, isBehavioural: QueryIntent(question: current, today: today).isBehavioral)
+                return AnswerPlan(format: format, extracts: preferred)
+            }
+            // A new general question in a long exchange must not inherit a biographical lookup.
+            if current != question && !QueryIntent(question: current, today: today).isPersonal,
+               QuestionKind(question: current, today: today) != .opinion {
+                return AnswerPlan(format: AnswerFormat(question: current, today: today), extracts: [])
+            }
+        }
         guard let base else { return AnswerPlan(format: format, extracts: []) }
         let extracts = format.kind == .opinion
             ? await base.opinions(for: question)

@@ -101,6 +101,16 @@ enum DiagnosticInterviewProfile {
                 let cvStory = " I diagnosed a queue incident and recovered the pending entries."
                 try (overview + (hasEvidence ? projectStory : "")).write(to: projects.appendingPathComponent("Atlas.md"), atomically: true, encoding: .utf8)
                 try ("# CV\n## Experience\nInternship in software development." + (hasEvidence ? cvStory : "")).write(to: root.appendingPathComponent("CV.md"), atomically: true, encoding: .utf8)
+                let note = root.appendingPathComponent("Interview notes.md")
+                let episode = "A release failed during my shift. I traced the missing dependency and rebuilt the package. As a result the deployment resumed."
+                let mention = "The challenge was keeping work centralized."
+                let draft = "Hypothetical example: if deployment failed, I would rebuild the package."
+                try (hasEvidence ? episode : draft).write(to: note, atomically: true, encoding: .utf8)
+                for index in 0..<25 {
+                    try mention.write(to: projects.appendingPathComponent("Planning-\(index).md"), atomically: true, encoding: .utf8)
+                }
+                let unconfirmed = "**A challenge — à confirmer**\n> A transfer failed. I corrected the address. The transfer resumed."
+                try unconfirmed.write(to: root.appendingPathComponent("Entretien.md"), atomically: true, encoding: .utf8)
                 let store = root.deletingLastPathComponent().appendingPathComponent("cache")
                 let index = try BaseIndex(url: store.appendingPathComponent("index.sqlite"))
                 _ = try await BaseIndexer(index: index, embedder: NoEmbedder(), store: store).run(BaseSource(root: root))
@@ -122,8 +132,8 @@ enum DiagnosticInterviewProfile {
                 record("Ask submits the exact behavioral question once with technical mode selected (evidence: \(hasEvidence))",
                        oneRequest && wire.contains(asked) && wire.contains("choose one documented episode") && wire.contains("Mode: Technical") && sent?.preferences.language == .english && !wire.contains(secret))
                 if hasEvidence {
-                    record("Ask retrieves both documented challenge passages with numbered CV and project sources",
-                           assist.context.includedExtracts.count == 2 && wire.contains(projectStory.trimmingCharacters(in: .whitespaces)) && wire.contains(cvStory.trimmingCharacters(in: .whitespaces)) && wire.contains("projet/Atlas.md") && wire.contains("CV.md") && wire.contains("[2]"))
+                    record("Ask selects a single documented incident, action and outcome ahead of vague project mentions",
+                           assist.context.includedExtracts.count == 1 && wire.contains("Interview notes.md") && wire.contains("rebuilt the package") && wire.contains("deployment resumed") && !wire.contains(mention) && !wire.contains("corrected the address"))
                     let paraphrase = "How did you overcome a setback during a project?"
                     session.clear()
                     let previousCount = await fake.conversations.count
@@ -136,10 +146,10 @@ enum DiagnosticInterviewProfile {
                     let follow = (await fake.conversations.last).map { CodexPrompt.turnInput(for: $0).compactMap { $0["text"]?.stringValue }.joined(separator: "\n") } ?? ""
                     submittedPrompts.append(["question": paraphrase, "availableStory": true, "excerpts": assist.context.includedExtracts.count, "codexInputText": follow])
                     record("a differently phrased behavioral Ask retrieves the documented event without the word challenge",
-                           follow.contains(paraphrase) && follow.contains("queue incident") && !assist.context.includedExtracts.isEmpty)
+                           follow.contains(paraphrase) && follow.contains("rebuilt the package") && !assist.context.includedExtracts.isEmpty)
                 } else {
                     record("Ask identifies missing evidence despite an available unrelated CV and project",
-                           assist.context.includedExtracts.isEmpty && wire.contains("source excerpts needed") && !wire.contains("Internship in software development.") && !wire.contains("The scheduler handles queued entries."))
+                           assist.context.includedExtracts.isEmpty && wire.contains("source excerpts needed") && !wire.contains("Internship in software development.") && !wire.contains("The scheduler handles queued entries.") && !wire.contains("corrected the address"))
                 }
             } catch {
                 record("behavioral Ask fixture completes (evidence: \(hasEvidence))", false)

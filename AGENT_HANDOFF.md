@@ -1,3 +1,13 @@
+# Build 24 — CV evidence in Ask and Answer
+
+An optional read-only local evidence database supplies short, sourced passages for personal questions in Technical interview mode. Both manual entry points keep the current request in scope. The selector favors a documented action and result, keeps the original document revision and attribution, and preserves qualifications such as simulated results. A general technical question can receive an answer without sending personal passages. Exclusions also apply to prior answers supplied as chat context.
+
+The app checks the source document fingerprint before using privately prepared evidence. After a CV change, review and prepare fresh passages, verify their source fingerprints, then use the local renewal tool documented by its help. Stale passages are skipped until renewal. Source files and private databases are user-local and are excluded from this repository.
+
+Upstream validation: 373 engine tests, 1,262 native checks, plus a live Ask trial against private data and a general technical question. The signed candidate was installed and validated; the live behavioral trial returned a sourced episode with its simulation qualifier. The retrieval is heuristic and unfamiliar wording can still miss. This sanitized source export has not been independently rebuilt.
+
+---
+
 # Build 23 — general technical interviews
 
 The selectable English technical interview profile uses sourced CV and project excerpts. It archives the old employer profile and migrates the enabled setting. Normal restores ordinary language and answer preferences. General and technical questions can proceed without personal excerpts. Ask accepts unfamiliar phrasings. Answer retains the two-minute working conversation.

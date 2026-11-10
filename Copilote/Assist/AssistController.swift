@@ -21,6 +21,7 @@ final class AssistController: ObservableObject {
 
     var onChatCleared: (() -> Void)?
     weak var listening: ListeningController?
+    private let settings: SettingsStore
     private let session: SessionController
     private let base: BaseController
     private let overlay: OverlayController
@@ -32,6 +33,7 @@ final class AssistController: ObservableObject {
     private var subscriptions: Set<AnyCancellable> = []
 
     init(settings: SettingsStore, session: SessionController, base: BaseController, overlay: OverlayController) {
+        self.settings = settings
         mode = settings.mode
         self.session = session
         self.base = base
@@ -101,7 +103,7 @@ final class AssistController: ObservableObject {
     }
 
     func includeAll() {
-        for item in context.items where !item.isIncluded { context.toggle(item.id) }
+        context.includeAll()
     }
 
     func run(_ action: AssistAction) {
@@ -151,10 +153,11 @@ final class AssistController: ObservableObject {
         askText = ""
         target = nil
         extractsTask?.cancel()
+        let scope = settings.interviewScope
         extractsTask = Task {
             let topic = Topic(id: "typed", title: text, excerpt: [text], createdAt: Date(), updatedAt: Date())
-            let plan = await base.plan(for: topic, conversation: listening?.transcript.lines ?? [])
-            guard !Task.isCancelled else { return }
+            let plan = await base.plan(for: topic, conversation: listening?.transcript.lines ?? [], manualInterview: true)
+            guard !Task.isCancelled, settings.interviewScope == scope else { return }
             extracts = plan.extracts
             format = plan.format
             refresh()

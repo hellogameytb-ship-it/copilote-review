@@ -23,6 +23,8 @@ public struct AssistContext: Equatable, Sendable {
     private var lines: [String: TranscriptLine] = [:]
     private var captures: [String: CapturedImage] = [:]
     private var extracts: [String: BaseSnippet] = [:]
+    private var excludedExtractIDs: Set<String> = []
+    public func excludes(source: String) -> Bool { excludedExtractIDs.contains("extract-" + source) }
 
     public init(lines: [TranscriptLine] = [], captures: [CapturedImage] = [], extracts: [BaseSnippet] = []) {
         refresh(lines: lines, captures: captures, extracts: extracts)
@@ -52,26 +54,34 @@ public struct AssistContext: Equatable, Sendable {
         for extract in extracts {
             let id = "extract-\(extract.source)"
             self.extracts[id] = extract
-            items.append(ContextItem(id: id, kind: .extract, label: extract.source, isIncluded: !excluded.contains(id)))
+            items.append(ContextItem(id: id, kind: .extract, label: extract.source, isIncluded: !excludedExtractIDs.contains(id)))
         }
         self.items = items
     }
 
     /// Replace only retrieved extracts; keep click-time switches for every other item.
     public mutating func replaceExtracts(with fresh: [BaseSnippet]) {
-        let excluded = Set(items.filter { !$0.isIncluded }.map(\.id))
         items.removeAll { $0.kind == .extract }
         extracts = [:]
         for extract in fresh {
             let id = "extract-\(extract.source)"
             extracts[id] = extract
-            items.append(ContextItem(id: id, kind: .extract, label: extract.source, isIncluded: !excluded.contains(id)))
+            items.append(ContextItem(id: id, kind: .extract, label: extract.source, isIncluded: !excludedExtractIDs.contains(id)))
         }
     }
 
     public mutating func toggle(_ id: String) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         items[index].isIncluded.toggle()
+        if items[index].kind == .extract {
+            if items[index].isIncluded { excludedExtractIDs.remove(id) }
+            else { excludedExtractIDs.insert(id) }
+        }
+    }
+
+    public mutating func includeAll() {
+        excludedExtractIDs.removeAll()
+        for index in items.indices { items[index].isIncluded = true }
     }
 
     public var includedLines: [TranscriptLine] { included(.line).compactMap { lines[$0.id] } }

@@ -469,8 +469,22 @@ final class SessionController: ObservableObject {
         draft.preferences = settings.answerPreferences
         let allowedNotes = Set(stickyNotes.notes.filter { $0.deletedAt == nil && $0.includeInAI }.map(\.id))
         notesByRequest[request.id] = allowedNotes
+        let currentContext: AssistContext? = {
+            if case let .assist(question) = input { return question.context }
+            return nil
+        }()
+        let personalTarget: Bool = {
+            guard case let .assist(q) = input, let text = q.question else { return false }
+            return InterviewEvidenceStore.isPersonalRequest(InterviewEvidenceStore.currentQuestion([text]))
+        }()
         let earlier = ChatContextBudget.previousExchanges(chat.filter {
-            $0.id >= contextStartRequestID && $0.id != request.id && $0.profileScope == settings.interviewScope &&
+            if case let .assist(previous) = $0.input {
+                let priorCV = previous.context.includedExtracts.filter { $0.interviewRevision != nil }
+                if !priorCV.isEmpty && (!personalTarget || !priorCV.allSatisfy { currentContext?.includedExtracts.contains($0) == true }) { return false }
+            }
+            if case let .assist(previous) = $0.input, let currentContext,
+               previous.context.includedExtracts.contains(where: { currentContext.excludes(source: $0.source) }) { return false }
+            return $0.id >= contextStartRequestID && $0.id != request.id && $0.profileScope == settings.interviewScope &&
             $0.isFinal && !$0.wasCancelled && $0.failure == nil && !$0.text.isEmpty &&
             (notesByRequest[$0.id] ?? []).isSubset(of: allowedNotes)
         }.map { (question: questionText($0), answer: $0.text) })

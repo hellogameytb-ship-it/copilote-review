@@ -42,7 +42,10 @@ public struct QueryIntent: Equatable, Sendable {
         let (period, periodPositions) = PeriodParser.period(in: tokens, today: today)
         consumed.formUnion(periodPositions)
 
-        let addressed = tokens.contains { Self.secondPerson.contains($0) || ["mon", "ma", "mes", "notre", "nos", "my", "our"].contains($0) }
+        let asksForAStory = behavioral && ["tell me about a time", "walk me through a time", "raconte", "racontez"].contains {
+            Cue($0).positions(in: tokens).contains(0)
+        }
+        let addressed = asksForAStory || tokens.contains { Self.secondPerson.contains($0) || ["mon", "ma", "mes", "notre", "nos", "my", "our"].contains($0) }
         isAddressed = addressed
         var personal = addressed && (!kinds.isEmpty || period != nil)
         if addressed, kinds.isEmpty, let guess = PersonalClassifier.shared.kind(of: tokens) {
@@ -103,7 +106,7 @@ public struct QueryIntent: Equatable, Sendable {
                  hint: QueryTerm(word: "conflit", alternatives: ["desaccord", "tension", "conflict", "disagree"])),
         CueGroup(kinds: [.project], cues: ["fierte", "fier", "fiere", "proud*", "reussite"].map(Cue.init),
                  hint: QueryTerm(word: "fierte", alternatives: ["fier", "reussite", "proud"])),
-        CueGroup(kinds: [.project, .cv], cues: ["difficile", "challenge*", "defi*", "obstacle*", "setback*", "overcame", "tell me about a time"].map(Cue.init),
+        CueGroup(kinds: [.project, .cv], cues: ["difficile", "challenge*", "defi*", "obstacle*", "setback*", "overcame", "went wrong", "went badly", "tough situation", "difficult situation", "difficult problem", "tricky problem", "surmont*", "imprevu*", "contretemps", "tell me about a time"].map(Cue.init),
                  hint: QueryTerm(word: "histoires", alternatives: ["challenge", "defi", "obstacle", "setback", "incident", "outage", "panne", "difficulte", "pression", "deadline", "echec", "conflit", "desaccord", "fierte", "difficile"])),
     ]
 

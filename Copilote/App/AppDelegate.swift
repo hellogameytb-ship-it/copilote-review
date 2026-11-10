@@ -9,7 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var providers = DiagnosticLaunchFixture.isRequested
         ? ProviderController(settings: settings, injectedProvider: RecetteProvider(), observesEnvironment: false)
         : ProviderController(settings: settings)
-    private lazy var base = BaseController(settings: settings, providers: providers)
+    private lazy var base = BaseController(settings: settings, providers: providers, evidenceDatabase: DiagnosticLaunchFixture.isRequested ? nil : InterviewEvidenceStore.defaultDatabase)
     private lazy var overlay = OverlayController(settings: settings)
     private lazy var notes = NotesController(settings: settings, providers: providers)
     private lazy var history = HistoryController(settings: settings, storeURL: DiagnosticLaunchFixture.historyURL)

@@ -43,6 +43,7 @@ final class BaseController: ObservableObject {
     private let providers: ProviderController
     private var index: BaseIndex?
     private var embedder: TextEmbedder?
+    private let evidenceDatabase: URL?
     private var personal: PersonalBase?
     private var watcher: FolderWatcher?
     private var indexing: Task<Void, Never>?
@@ -55,9 +56,10 @@ final class BaseController: ObservableObject {
             .appendingPathComponent("Copilote/Base", isDirectory: true)
     }
 
-    init(settings: SettingsStore, providers: ProviderController, personal: PersonalBase? = nil) {
+    init(settings: SettingsStore, providers: ProviderController, personal: PersonalBase? = nil, evidenceDatabase: URL? = nil) {
         self.settings = settings
         self.providers = providers
+        self.evidenceDatabase = evidenceDatabase
         self.personal = personal
     }
 
@@ -202,14 +204,20 @@ final class BaseController: ObservableObject {
     }
 
     /// How a case is answered: its kind's format and the extracts it may use (avis.md alone for an opinion).
-    func plan(for topic: Topic, conversation: [TranscriptLine] = []) async -> AnswerPlan {
-        await AnswerPlan.make(heard: topic.excerpt.isEmpty ? [topic.title] : topic.excerpt, base: router.mode == .off ? nil : personal, conversation: conversation)
+    private var interviewEvidence: InterviewEvidenceStore? {
+        guard settings.technicalInterviewActive, router.mode != .off, let evidenceDatabase else { return nil }
+        return InterviewEvidenceStore(database: evidenceDatabase, root: root)
+    }
+
+    func plan(for topic: Topic, conversation: [TranscriptLine] = [], manualInterview: Bool = false) async -> AnswerPlan {
+        await AnswerPlan.make(heard: topic.excerpt.isEmpty ? [topic.title] : topic.excerpt, base: router.mode == .off ? nil : personal, conversation: conversation, interviewEvidence: manualInterview ? interviewEvidence : nil)
     }
 
     /// Freeze the selected base before asynchronous lookup starts.
     func snapshotPlan(heard: [String], conversation: [TranscriptLine]) -> @MainActor () async -> AnswerPlan {
         let selected = router.mode == .off ? nil : personal
-        return { await AnswerPlan.make(heard: heard, base: selected, conversation: conversation) }
+        let evidence = interviewEvidence
+        return { await AnswerPlan.make(heard: heard, base: selected, conversation: conversation, interviewEvidence: evidence) }
     }
 
     /// « Afficher » on a suggestion: the fiche opens, even over an answer being read.

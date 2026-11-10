@@ -5,10 +5,12 @@ public struct BaseSnippet: Equatable, Sendable {
     /// "Revisio › Chiffres (projets/revisio.md)".
     public let source: String
     public let text: String
+    public let interviewRevision: String?
 
-    public init(source: String, text: String) {
+    public init(source: String, text: String, interviewRevision: String? = nil) {
         self.source = source
         self.text = text
+        self.interviewRevision = interviewRevision
     }
 }
 

@@ -196,18 +196,16 @@ public struct PersonalBase: Sendable {
     /// ⌥1-4 on a topic about the user: the three best extracts, and the next two if they are
     /// confident enough. Nothing for any other topic.
     public func snippets(for text: String, router: PersonalRouter = PersonalRouter(mode: .show), today: CalendarDay = .today()) async -> [BaseSnippet] {
-        guard router.mode != .off, let result = try? await search.search(text, today: today), let best = result.hits.first,
+        guard router.mode != .off else { return [] }
+        let intent = QueryIntent(question: text, today: today)
+        if intent.isBehavioral {
+            return (try? await search.storySnippets(for: intent)) ?? []
+        }
+        guard let result = try? await search.search(text, today: today), let best = result.hits.first,
               SearchEvidence.isAboutTheUser(result.intent, best: best.item) else { return [] }
-        let storyTerms = result.intent.storyTerms
-        let chosen = result.hits.filter { hit in
-            guard hit.confidence >= router.suggestThreshold else { return false }
-            guard !storyTerms.isEmpty else { return true }
-            let item = hit.item
-            guard item.kind == .cv || item.kind == .project else { return false }
-            let text = BaseText(item.label + "\n" + item.text)
-            return storyTerms.contains { $0.matches(text) }
-        }.prefix(BaseContext.maxSnippets).map(\.item)
-        return BaseContext.snippets(from: chosen, focusingOn: storyTerms)
+        let chosen = result.hits.filter { $0.confidence >= router.suggestThreshold }
+            .prefix(BaseContext.maxSnippets).map(\.item)
+        return BaseContext.snippets(from: chosen)
     }
 
     /// An opinion question: the sections of avis.md about its subject, or none (never a guess).

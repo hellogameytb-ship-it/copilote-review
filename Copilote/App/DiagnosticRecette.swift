@@ -88,12 +88,19 @@ enum DiagnosticRecette {
             var server: CodexAppServer?
             func record(_ name: String, _ ok: Bool) {
                 checks.append(["name": name, "passed": ok])
-                let result: [String: Any] = ["checks": checks, "realAppWindows": true, "productionControllers": true, "provider": realProviderUsed ? "controlled fixture then real Codex" : "controlled fixture", "desktopEvents": false, "bundle": Bundle.main.bundleURL.path, "version": Bundle.main.infoDictionary?["CFBundleVersion"] ?? "unknown"]
+                let result: [String: Any] = ["checks": checks, "realAppWindows": true, "productionControllers": true, "provider": realProviderUsed ? "real Codex requested" : "controlled fixture", "desktopEvents": false, "bundle": Bundle.main.bundleURL.path, "version": Bundle.main.infoDictionary?["CFBundleVersion"] ?? "unknown"]
                 if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) { try? data.write(to: folder.appendingPathComponent("recette.json"), options: .atomic) }
             }
             func pause(_ ms: Int = 450) async { try? await Task.sleep(for: .milliseconds(ms)) }
             @MainActor func fieldEditor() -> NSTextView? { NSApp.windows.first { $0.isVisible && $0.isKeyWindow && $0 is OverlayPanel }?.firstResponder as? NSTextView }
             await pause()
+            if DiagnosticAnchorFixture.isRequested && args.contains("-RecetteEvidenceOnly") {
+                realProviderUsed = args.contains("-RecetteCodex")
+                await DiagnosticPrivateEvidence.run(folder: folder, live: args.contains("-RecetteCodex"), settings: settings, session: session, overlay: overlay, providers: providers, listening: listening, fake: fake, record: record)
+                defaults.removePersistentDomain(forName: suite)
+                NSApp.terminate(nil)
+                return
+            }
             if DiagnosticAnchorFixture.isRequested {
                 await DiagnosticCaptureButton.run(folder:folder,overlay:overlay,settings:settings,listening:listening,assist:assist,session:session,capturer:fixtureCapturer,provider:fake,record:record)
                 await DiagnosticAnchorFixture.run(folder: folder, overlay: overlay, settings: settings, assist: assist, session: session, listening: listening, menu: menu, mainWindow: mainWindow, record: record)

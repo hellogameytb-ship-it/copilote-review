@@ -50,6 +50,7 @@ public actor BaseSearch {
     private let embedder: TextEmbedder
     private var loadedVersion = -1
     private var items: [BaseItem] = []
+    private var episodes: [BehavioralEpisode]?
     private var byID: [String: Int] = [:]
     /// Centred, unit-length vectors (centring removes the direction all sentences share).
     private var vectors: [[Float]?] = []
@@ -105,6 +106,18 @@ public actor BaseSearch {
         return SearchResult(intent: intent, hits: Array(found.prefix(limit)), elapsed: clock.now - started)
     }
 
+    /// Rank documented episodes before any generic lexical/semantic top-k truncation.
+    func storySnippets(for intent: QueryIntent) throws -> [BaseSnippet] {
+        try reloadIfNeeded()
+        let query = " " + BaseText.tokens(of: intent.question).joined(separator: " ") + " "
+        let namedProjects = Set(items.filter { $0.kind == .project }.map(\.title)).compactMap { title -> String? in
+            let name = BaseText.tokens(of: title).joined(separator: " ")
+            return name.count >= 3 && query.contains(" " + name + " ") ? name : nil
+        }
+        guard intent.isPersonal || !namedProjects.isEmpty else { return [] }
+        return BehavioralEpisode.best(for: intent, in: preparedEpisodes(), namedProjects: namedProjects)
+    }
+
     /// Photos of a trip: its linked folder, or taken during its dates. Oldest first.
     public func photos(for trip: BaseItem, limit: Int = 24) throws -> [BaseItem] {
         try reloadIfNeeded()
@@ -138,9 +151,16 @@ public actor BaseSearch {
         return items.filter { $0.kind == .opinion }
     }
 
-    /// Loads the index and the model ahead of the first question.
+    private func preparedEpisodes() -> [BehavioralEpisode] {
+        if let episodes { return episodes }
+        let prepared = BehavioralEpisode.catalog(items)
+        episodes = prepared
+        return prepared
+    }
+
+    /// Prepare the index, evidence and embedder before the first question.
     public func warmUp() {
-        try? reloadIfNeeded()
+        if (try? reloadIfNeeded()) != nil { _ = preparedEpisodes() }
         _ = embedder.vector(for: "préchauffage")
     }
 
@@ -188,6 +208,7 @@ public actor BaseSearch {
         let version = index.version
         guard version != loadedVersion else { return }
         let stored = try index.items()
+        episodes = nil
         items = stored.map(\.item)
         byID = Dictionary(items.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
         let raw = stored.map(\.vector)

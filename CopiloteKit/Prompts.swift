@@ -107,11 +107,11 @@ public enum Prompts {
             """
         case .fact: return "Give the direct answer in one ready-to-say sentence, then 2–3 supporting points. State uncertainty when evidence is insufficient."
         case .personal where technicalInterview:
-            guard hasExtracts else { return "If this asks about my actual experience, the source excerpts needed to answer it are missing. Say which CV or project detail is needed." }
+            guard hasExtracts else { return "If this asks about my actual experience, the source excerpts needed to answer it are missing. Say which documented detail is needed." }
             if format.isBehavioural {
                 return "Choose one documented episode. Build the ready-to-say answer from its cited passage alone. When the source is brief, quote or closely translate the documented action and stop there. Do not add inferred motives, risks, causes, sequencing, duration, metrics or outcomes to the story. Identify missing details separately."
             }
-            return "Answer in the first person only where the supplied CV or project excerpts support it. Cite [n] for each personal fact and identify any missing details."
+            return "Answer in the first person only where the supplied personal-source excerpts support it. Cite [n] for each personal fact and identify any missing details."
         case .personal where !hasExtracts:
             return "No relevant personal-base excerpt was found. Use only personal facts explicitly stated by Me in the session. If those are insufficient, state what is missing and offer a fill-in outline: situation → my actions → result → learning. Never turn an assistant draft or an interviewer suggestion into a fact about me."
         case .personal where format.isBehavioural:

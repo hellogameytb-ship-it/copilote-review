@@ -8,7 +8,7 @@ struct AnswerSettingsSection: View {
     var body: some View {
         Section("Interview profile") {
             Toggle("Technical interview", isOn: $settings.technicalInterviewActive)
-            Text("Answer in English using relevant excerpts from the CV and projects in your personal base. When a detail is missing, the answer says so.").font(.caption)
+            Text("Answer in English using relevant excerpts from your CV, projects, and documented interview notes in your personal base. When a detail is missing, the answer says so.").font(.caption)
         }
         Section(Copy.Settings.answersSection) {
             VStack(alignment: .leading, spacing: 6) {

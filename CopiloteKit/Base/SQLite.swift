@@ -18,8 +18,8 @@ final class SQLiteDatabase: @unchecked Sendable {
 
     private var handle: OpaquePointer?
 
-    init(path: String) throws {
-        let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
+    init(path: String, readOnly: Bool = false) throws {
+        let flags = (readOnly ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE) | SQLITE_OPEN_FULLMUTEX
         guard sqlite3_open_v2(path, &handle, flags, nil) == SQLITE_OK else {
             let message = handle.map { String(cString: sqlite3_errmsg($0)) } ?? "open"
             sqlite3_close(handle)

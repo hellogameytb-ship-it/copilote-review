@@ -20,7 +20,15 @@ enum DiagnosticChat {
         func number(_ code: String) async -> Double { (await js(code) as? NSNumber)?.doubleValue ?? -1 }
         func finish() async { for _ in 0..<300 { if !session.isAnswering { break };await pause(5) };await pause() }
         func ask(_ question: String, reply: String) async {
-            await provider.replyNext(reply);assist.askText=question;assist.submitAsk();await pause(10);await finish()
+            let count = await provider.conversations.count
+            await provider.replyNext(reply)
+            assist.askText = question
+            assist.submitAsk()
+            for _ in 0..<300 {
+                if await provider.conversations.count > count { break }
+                await pause(5)
+            }
+            await finish()
         }
         func line(_ text: String,_ start: Double) { listening.receiveRecetteEvent(.line(TranscriptLine(speaker:.them,text:text,start:start,end:start+1),language:"fixture",latency:0)) }
         func prompt() async -> String {
