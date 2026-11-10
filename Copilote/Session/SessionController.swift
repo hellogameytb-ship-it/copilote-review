@@ -311,6 +311,27 @@ final class SessionController: ObservableObject {
     /// Répondre / Que dire / Notes / Demander. Included captures leave the stack with the request
     /// (and come back if it fails); switched-off ones stay on it.
     /// Cancelling first restores pending captures before the new click snapshot is taken.
+    private var episodeStartID = 0
+
+    func invalidateEpisode() { episodeStartID = nextRequestID + 1 }
+
+    func previousEpisode(for text: String, context: AssistContext, live: LiveAnswerSnapshot? = nil) -> EpisodeReference? {
+        guard EpisodeReference.isFollowUp(text), let previous = chat.last, shown === previous,
+              previous.id >= max(contextStartRequestID, episodeStartID), previous.profileScope == settings.interviewScope,
+              previous.isFinal, !previous.wasCancelled, previous.failure == nil, !previous.isAutomatic,
+              case let .assist(q) = previous.input, q.action == .answer else { return nil }
+        let speech = live?.workingLines ?? context.includedLines
+        let additions = speech.filter { $0.speaker == .them && !q.context.includedLines.contains($0) }
+        let acknowledgements = ["ok", "okay", "merci", "thanks", "thank you", "right", "oui", "yes", "d accord"]
+        for line in additions {
+            let words = BaseText.tokens(of: line.text).joined(separator: " ")
+            if !EpisodeReference.isFollowUp(line.text) && !acknowledgements.contains(words) { return nil }
+        }
+        let refs = q.context.includedExtracts.filter { !context.excludes(source: $0.source) }
+        guard !refs.isEmpty, let lookup = q.episodeLookup ?? q.question else { return nil }
+        return EpisodeReference(lookup: lookup, extracts: refs)
+    }
+
     func prepareFreshAnswer() {
         keepsManualFocus = true
         cancelCurrent()
@@ -469,25 +490,23 @@ final class SessionController: ObservableObject {
         draft.preferences = settings.answerPreferences
         let allowedNotes = Set(stickyNotes.notes.filter { $0.deletedAt == nil && $0.includeInAI }.map(\.id))
         notesByRequest[request.id] = allowedNotes
-        let currentContext: AssistContext? = {
-            if case let .assist(question) = input { return question.context }
-            return nil
+        // Freeze previous turns at the gesture, but authorize their use against the
+        // newly resolved sources (including the asynchronous Answer lookup).
+        let isEpisodeFollowUp: Bool = {
+            if case let .assist(q) = input { return EpisodeReference.isFollowUp(q.question ?? "") }
+            return false
         }()
-        let personalTarget: Bool = {
-            guard case let .assist(q) = input, let text = q.question else { return false }
-            return InterviewEvidenceStore.isPersonalRequest(InterviewEvidenceStore.currentQuestion([text]))
-        }()
-        let earlier = ChatContextBudget.previousExchanges(chat.filter {
-            if case let .assist(previous) = $0.input {
-                let priorCV = previous.context.includedExtracts.filter { $0.interviewRevision != nil }
-                if !priorCV.isEmpty && (!personalTarget || !priorCV.allSatisfy { currentContext?.includedExtracts.contains($0) == true }) { return false }
-            }
-            if case let .assist(previous) = $0.input, let currentContext,
-               previous.context.includedExtracts.contains(where: { currentContext.excludes(source: $0.source) }) { return false }
-            return $0.id >= contextStartRequestID && $0.id != request.id && $0.profileScope == settings.interviewScope &&
-            $0.isFinal && !$0.wasCancelled && $0.failure == nil && !$0.text.isEmpty &&
-            (notesByRequest[$0.id] ?? []).isSubset(of: allowedNotes)
-        }.map { (question: questionText($0), answer: $0.text) })
+        let previousManualID = chat.last(where: { $0.id < request.id })?.id
+        let previousTurns = chat.compactMap { previous -> (String, String, [BaseSnippet])? in
+            if isEpisodeFollowUp && (previous.id != previousManualID || previous.id < episodeStartID) { return nil }
+            guard previous.id >= contextStartRequestID, previous.id != request.id,
+                  previous.profileScope == settings.interviewScope, previous.isFinal, !previous.wasCancelled,
+                  previous.failure == nil, !previous.text.isEmpty,
+                  (notesByRequest[previous.id] ?? []).isSubset(of: allowedNotes) else { return nil }
+            let refs: [BaseSnippet]
+            if case let .assist(q) = previous.input { refs = q.context.includedExtracts } else { refs = [] }
+            return (questionText(previous), previous.text, refs)
+        }
         let personalNotes = stickyNotes.includedContext
         let priorTyped = typedRequests.filter { $0.scope == settings.interviewScope }.suffix(4).map { String($0.text.prefix(1000)) }
         if case let .assist(question) = input, question.typed, let text = question.question { typedRequests.append((settings.interviewScope, text)); typedRequests = Array(typedRequests.suffix(6)) }
@@ -510,8 +529,15 @@ final class SessionController: ObservableObject {
                         question.context.replaceExtracts(with: fresh.extracts)
                         question.format = fresh.format
                     }
-                    question.earlierAnswers = earlier
-                    question.priorTypedRequests = priorTyped
+                    question.earlierAnswers = ChatContextBudget.previousExchanges(previousTurns.compactMap { prior in
+                        let (asked, answer, refs) = prior
+                        guard !refs.contains(where: { question.context.excludes(source: $0.source) }) else { return nil }
+                        let sensitive = refs.filter { $0.interviewRevision != nil }
+                        guard sensitive.allSatisfy(question.context.includedExtracts.contains) else { return nil }
+                        if EpisodeReference.isFollowUp(question.question ?? ""), !refs.allSatisfy(question.context.includedExtracts.contains) { return nil }
+                        return (asked, answer)
+                    })
+                    question.priorTypedRequests = isEpisodeFollowUp ? [] : priorTyped
                     question.personalNotes = personalNotes
                     prepared = .assist(question)
                 }

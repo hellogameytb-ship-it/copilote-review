@@ -118,6 +118,21 @@ public actor BaseSearch {
         return BehavioralEpisode.best(for: intent, in: preparedEpisodes(), namedProjects: namedProjects)
     }
 
+    /// Recheck the exact passage in the active index instead of ranking a different
+    /// project for an elliptical role or outcome question.
+    func revalidated(_ prior: [BaseSnippet], lookup: String) throws -> [BaseSnippet] {
+        try reloadIfNeeded()
+        if QueryIntent(question: lookup).isBehavioral {
+            let episodes = preparedEpisodes()
+            return prior.filter { ref in episodes.contains { $0.source == ref.source && $0.passage == ref.text } }
+        }
+        return prior.filter { ref in
+            items.contains { item in
+                "\(item.label) (\(item.source))" == ref.source && BaseContext.snippets(from: [item]).contains(ref)
+            }
+        }
+    }
+
     /// Photos of a trip: its linked folder, or taken during its dates. Oldest first.
     public func photos(for trip: BaseItem, limit: Int = 24) throws -> [BaseItem] {
         try reloadIfNeeded()

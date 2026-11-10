@@ -77,4 +77,19 @@ final class InterviewEvidenceStoreTests: XCTestCase {
         context.replaceExtracts(with: [result])
         XCTAssertTrue(context.includedExtracts.isEmpty)
     }
+    func test_followup_revalidates_original_source_and_never_substitutes_another_episode() async throws {
+        let ref = try XCTUnwrap(reader.snippets(for: question).first)
+        let episode = EpisodeReference(lookup: question, extracts: [ref])
+        func follow() async -> AnswerPlan {
+            await AnswerPlan.make(heard: ["what did you personally do?"], base: nil, interviewEvidence: reader, episode: episode)
+        }
+        let valid = await follow()
+        XCTAssertEqual(valid.extracts, [ref])
+        try Data("updated real source bytes".utf8).write(to: source)
+        let changed = await follow()
+        XCTAssertTrue(changed.extracts.isEmpty)
+        let unrelated = await AnswerPlan.make(heard: ["Explain a linked list"], base: nil, interviewEvidence: reader, episode: episode)
+        XCTAssertTrue(unrelated.extracts.isEmpty)
+    }
+
 }

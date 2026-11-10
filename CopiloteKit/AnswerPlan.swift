@@ -39,7 +39,16 @@ public struct AnswerPlan: Equatable, Sendable {
     public var isWorthDrafting: Bool { format.kind != .none }
 
     /// The last two turns heard tell the kind: a follow-up alone ("et pourquoi ?") says too little.
-    public static func make(heard: [String], base: PersonalBase?, conversation: [TranscriptLine] = [], interviewEvidence: InterviewEvidenceStore? = nil, today: CalendarDay = .today()) async -> AnswerPlan {
+    public static func make(heard: [String], base: PersonalBase?, conversation: [TranscriptLine] = [], interviewEvidence: InterviewEvidenceStore? = nil, episode: EpisodeReference? = nil, today: CalendarDay = .today()) async -> AnswerPlan {
+        if EpisodeReference.isFollowUp(heard.joined(separator: "\n")) {
+            let format = AnswerFormat(kind: .personal)
+            guard let episode else { return AnswerPlan(format: format, extracts: []) }
+            let privateRefs = episode.extracts.filter { $0.interviewRevision != nil }
+            let verified = privateRefs.isEmpty ? [] : interviewEvidence?.revalidated(privateRefs) ?? []
+            let localRefs = episode.extracts.filter { $0.interviewRevision == nil }
+            let local = localRefs.isEmpty ? [] : (try? await base?.search.revalidated(localRefs, lookup: episode.lookup)) ?? []
+            return AnswerPlan(format: format, extracts: verified + local)
+        }
         var heard = heard
         let latest = heard.last?.lowercased() ?? ""
         if latest.split(separator: " ").count < 16,

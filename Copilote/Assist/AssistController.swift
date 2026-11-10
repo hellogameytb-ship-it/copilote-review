@@ -43,6 +43,12 @@ final class AssistController: ObservableObject {
             guard let self,self.askText.isEmpty else { return }
             self.askText=text
         }
+        settings.$technicalInterviewActive.removeDuplicates().dropFirst().sink { [weak self] _ in
+            self?.extractsTask?.cancel()
+            self?.session.invalidateEpisode()
+            self?.extracts = []
+            self?.refresh()
+        }.store(in: &subscriptions)
         session.$lastFinished
             .sink { [weak self] finished in
                 guard let self else { return }
@@ -130,8 +136,20 @@ final class AssistController: ObservableObject {
         question.liveSnapshot = snapshot
         // A single complete working exchange also prevents the base plan's suffix(2) from
         // reducing a fragmented question to its closing acknowledgement.
-        let plan = base.snapshotPlan(heard: [snapshot.focusText], conversation: snapshot.recentLines)
-        session.assist(question, label: "Answer · latest speech", topic: nil, plan: plan)
+        let episode = session.previousEpisode(for: snapshot.focusText, context: frozenContext, live: snapshot)
+        question.episodeLookup = episode?.lookup
+        let plan = base.snapshotPlan(heard: [snapshot.focusText], conversation: snapshot.recentLines, episode: episode)
+        let scope = settings.interviewScope
+        session.assist(question, label: "Answer · latest speech", topic: nil, plan: { [weak self] in
+            let fresh = await plan()
+            if let self, !Task.isCancelled, self.settings.interviewScope == scope, self.target == nil {
+                // Make the resolved sources available in the context switches for the next gesture.
+                // The current request still uses its own frozen context and exclusions.
+                self.extracts = fresh.extracts
+                self.refresh()
+            }
+            return fresh
+        })
     }
 
     private func runSelected(_ action: AssistAction) {
@@ -153,15 +171,19 @@ final class AssistController: ObservableObject {
         askText = ""
         target = nil
         extractsTask?.cancel()
+        refresh()
         let scope = settings.interviewScope
+        let sourceFolder = settings.baseFolder, sourceMode = settings.baseMode
+        let episode = session.previousEpisode(for: text, context: context)
         extractsTask = Task {
             let topic = Topic(id: "typed", title: text, excerpt: [text], createdAt: Date(), updatedAt: Date())
-            let plan = await base.plan(for: topic, conversation: listening?.transcript.lines ?? [], manualInterview: true)
-            guard !Task.isCancelled, settings.interviewScope == scope else { return }
+            let plan = await base.plan(for: topic, conversation: listening?.transcript.lines ?? [], manualInterview: true, episode: episode)
+            guard !Task.isCancelled, settings.interviewScope == scope, settings.baseFolder == sourceFolder, settings.baseMode == sourceMode else { return }
             extracts = plan.extracts
             format = plan.format
             refresh()
-            let question = AssistQuestion(action: .answer, mode: mode, question: text, heard: [], context: context, typed: true, format: plan.format)
+            var question = AssistQuestion(action: .answer, mode: mode, question: text, heard: [], context: context, typed: true, format: plan.format)
+            question.episodeLookup = episode?.lookup
             session.assist(question, label: "Ask · \(text.prefix(40))", topic: nil)
         }
     }

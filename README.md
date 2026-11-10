@@ -1,6 +1,6 @@
 # Copilote — source review snapshot
 
-Native macOS conversation assistance in Swift, SwiftUI and AppKit. Build 24 prioritizes verified, user-selected CV evidence in the English technical interview mode. See the handoff for source renewal and validation. See [AGENT_HANDOFF.md](AGENT_HANDOFF.md) for changes, architecture, validation and remaining limits.
+Native macOS conversation assistance in Swift, SwiftUI and AppKit. Build 25 revalidates source passages across interview follow-ups and distinguishes suggestions from documented actions. See the handoff for source renewal and validation. See [AGENT_HANDOFF.md](AGENT_HANDOFF.md) for changes, architecture, validation and remaining limits.
 
 This repository has its own history and pseudonymous commit identity. It excludes personal documents, knowledge vaults, interview context, notes, credentials, recordings, screenshots, signing identity, private reports and original Git history. Profiles contain generic instructions; provide your own synthetic context for review.
 

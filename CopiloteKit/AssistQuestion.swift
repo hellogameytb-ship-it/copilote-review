@@ -121,6 +121,7 @@ public struct AssistQuestion: Equatable, Sendable {
     /// A case's kind of question: its own format (nil: the generic one).
     public var format: AnswerFormat?
     public var liveSnapshot: LiveAnswerSnapshot? = nil
+    public var episodeLookup: String?
     public var earlierAnswers = ""
     public var priorTypedRequests: [String] = []
     public var personalNotes: [String] = []

@@ -1,3 +1,11 @@
+# Build 25 — follow-ups on a sourced experience
+
+When an interviewer asks a follow-up about a previously discussed experience, Ask and Answer can recover the current episode and revalidate its source. Preserve document revision checks, user exclusions, chat clearing, and profile boundaries whenever modifying the retrieval path. A suggested action must remain distinguishable from an action the candidate actually took.
+
+The installed upstream build passed 377 engine tests, 1,262 native checks and 29 profile checks. An additional 15 checks exercised continuity and exclusions on fictional data, and 15 checks covered a live three-answer sequence in Ask. Ten checks failed on an intermediate candidate; the full final suite passed. Answer coverage used a test transcript. The public source export was checked for window-policy and diff issues; it has not been independently rebuilt.
+
+---
+
 # Build 24 — CV evidence in Ask and Answer
 
 An optional read-only local evidence database supplies short, sourced passages for personal questions in Technical interview mode. Both manual entry points keep the current request in scope. The selector favors a documented action and result, keeps the original document revision and attribution, and preserves qualifications such as simulated results. A general technical question can receive an answer without sending personal passages. Exclusions also apply to prior answers supplied as chat context.

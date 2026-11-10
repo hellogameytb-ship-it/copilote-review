@@ -91,27 +91,8 @@ public struct InterviewEvidenceStore: Sendable {
 
     public func snippets(for question: String) -> [BaseSnippet] {
         let intent = QueryIntent(question: question)
-        guard Self.isPersonalRequest(question),
-              let connection = try? SQLiteDatabase(path: database.path, readOnly: true),
-              let values = try? connection.run("SELECT id,topic,tags,passage,source,source_sha256 FROM evidence ORDER BY id LIMIT 1001"),
-              values.count <= 1000 else { return [] }
-        var hashes: [String:String] = [:]
-        var rows: [Row] = []
-        for fields in values {
-            let v = fields.compactMap(\.text)
-            guard v.count == 6, !v[1].isEmpty, !v[3].isEmpty, v[3].count <= 1200,
-                  v[1].count <= 512, v[4].count <= 240, v[5].count == 64,
-                  !VaultPolicy.containsSecrets(v[1] + "\n" + v[3]) else { continue }
-            let row = Row(id:v[0],topic:v[1],tags:v[2],passage:v[3],source:v[4],hash:v[5])
-            if hashes[row.filename] == nil {
-                hashes[row.filename] = original(row.filename).flatMap { try? Data(contentsOf: $0) }
-                    .map { SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined() } ?? ""
-            }
-            let normalized = BaseText.tokens(of: row.passage).joined(separator: " ")
-            let uncertain = ["i would ", "we could ", "hypothetical example", "a confirmer", "to confirm"]
-            if hashes[row.filename] == row.hash.lowercased() && !uncertain.contains(where: normalized.contains) { rows.append(row) }
-        }
-
+        guard Self.isPersonalRequest(question) else { return [] }
+        let rows = verifiedRows()
         let words = Set(intent.terms.map(\.word))
         let query = Self.expanded(Set(BaseText.tokens(of: question)))
         let meaningful = Self.expanded(words.subtracting(Self.broad))
@@ -136,6 +117,42 @@ public struct InterviewEvidenceStore: Sendable {
             return (row,score)
         }.sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0.id < $1.0.id }
         guard let (best, _) = ranked.first else { return [] }
+        return [snippet(for: best, in: rows)]
+    }
+
+    /// Match the exact previously shown evidence against today's database and original
+    /// documents. A changed digest, passage, attribution or deleted row breaks the link.
+    public func revalidated(_ references: [BaseSnippet]) -> [BaseSnippet] {
+        let rows = verifiedRows()
+        let current = rows.map { snippet(for: $0, in: rows) }
+        return references.filter(current.contains)
+    }
+
+    private func verifiedRows() -> [Row] {
+        guard let connection = try? SQLiteDatabase(path: database.path, readOnly: true),
+              let values = try? connection.run("SELECT id,topic,tags,passage,source,source_sha256 FROM evidence ORDER BY id LIMIT 1001"),
+              values.count <= 1000 else { return [] }
+        var hashes: [String:String] = [:]
+        var rows: [Row] = []
+        for fields in values {
+            let v = fields.compactMap(\.text)
+            guard v.count == 6, !v[1].isEmpty, !v[3].isEmpty, v[3].count <= 1200,
+                  v[1].count <= 512, v[4].count <= 240, v[5].count == 64,
+                  !VaultPolicy.containsSecrets(v[1] + "\n" + v[3]) else { continue }
+            let row = Row(id:v[0],topic:v[1],tags:v[2],passage:v[3],source:v[4],hash:v[5])
+            if hashes[row.filename] == nil {
+                hashes[row.filename] = original(row.filename).flatMap { try? Data(contentsOf: $0) }
+                    .map { SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined() } ?? ""
+            }
+            let normalized = BaseText.tokens(of: row.passage).joined(separator: " ")
+            let uncertain = ["i would ", "we could ", "hypothetical example", "a confirmer", "to confirm"]
+            if hashes[row.filename] == row.hash.lowercased() && !uncertain.contains(where: normalized.contains) { rows.append(row) }
+        }
+
+        return rows
+    }
+
+    private func snippet(for best: Row, in rows: [Row]) -> BaseSnippet {
         var passages = [best.passage]
         // Keep a result-only CV bullet with a little context from the same short entry.
         // Never merge different sources or attach an entire multi-project job entry.
@@ -147,6 +164,6 @@ public struct InterviewEvidenceStore: Sendable {
         let provenance = best.isCV ? "Recruiter CV" : "Interview preparation note (confirm personal details)"
         let teamwork = Set(BaseText.tokens(of: best.tags)).contains("teamwork")
         let scope = teamwork ? " · team project (individual role only if documented)" : ""
-        return [BaseSnippet(source: "\(provenance) · \(best.source) · \(best.topic)\(scope)", text: passages.joined(separator: "\n"), interviewRevision: best.hash)]
+        return BaseSnippet(source: "\(provenance) · \(best.source) · \(best.topic)\(scope)", text: passages.joined(separator: "\n"), interviewRevision: best.hash)
     }
 }

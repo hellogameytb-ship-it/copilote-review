@@ -32,6 +32,14 @@ public enum Prompts {
         """
     }
 
+    static let possibleAnswer = """
+    Lead with what the authorized sources establish, citing them where relevant. Answer a role follow-up about the same episode using those sources.
+    If the question asks for a detail the sources do not establish, briefly identify the gap. Then give one concrete, ready-to-say proposal under “Possible answer — use only if accurate” (translate the label when answering in another language).
+    Make the proposal conditional or prospective: describe a specific plausible step, why it fits, or how it could be checked. Do not attribute an undocumented action, decision, tool, outcome or number to the user as a past fact. When only team work is documented, use “our team” as the subject of each documented action. Do not switch to an individual actor, even in a dependent clause.
+    The heading does not make a past-tense claim conditional. When the role or incident is unverified, begin the proposed spoken answer with “I would” or “I could” (or the equivalent in the response language), followed by a concrete action suited to this episode. Keep the entire proposed answer hypothetical. Write the proposal as one spoken sentence. After “I would”, go directly to the project action and its purpose. For example, for a stalled import: “I would replay the first failing record in isolation and compare its fields with the expected schema.” Never describe what you would say, claim, tell the interviewer or put on a CV. Never embed a past-tense claim inside “I could say that …”. Keep “My contribution was…”, “I implemented…” and “I was responsible for…” out of a proposal altogether. State all sourced results before the suggestion.
+    Separate the proposal from the cited facts. Do not cite a suggestion as evidence, give blanks or a generic STAR template, or ask the user to repeat an episode already available. Ask at most one precise clarification if it would materially improve the answer. For a fully answerable general question, just answer it directly.
+    """
+
     static func assistInstruction(_ question: AssistQuestion, technicalInterview: Bool = false) -> String {
         let context = question.context
         let mode: MeetingMode = technicalInterview ? .technical : question.mode
@@ -85,6 +93,7 @@ public enum Prompts {
         let format = question.liveSnapshot == nil ? question.format : nil
         parts.append(format.flatMap { formatInstruction($0, action: question.action, hasExtracts: !context.includedExtracts.isEmpty, technicalInterview: technicalInterview) } ?? actionInstruction(question.action, mode: mode))
         if question.action == .answer, question.typed || question.liveSnapshot != nil {
+            parts.append(possibleAnswer)
             parts.append("""
             Answer the current request in its own terms. Use a suggested format only when it fits the question.
             Answer an open, general or hypothetical question directly, even without personal excerpts.
@@ -107,15 +116,15 @@ public enum Prompts {
             """
         case .fact: return "Give the direct answer in one ready-to-say sentence, then 2–3 supporting points. State uncertainty when evidence is insufficient."
         case .personal where technicalInterview:
-            guard hasExtracts else { return "If this asks about my actual experience, the source excerpts needed to answer it are missing. Say which documented detail is needed." }
+            guard hasExtracts else { return "If this asks about my actual experience, the source excerpts needed to answer it are missing. Offer a concrete conditional response, keeping the missing detail distinct from sourced experience." }
             if format.isBehavioural {
-                return "Choose one documented episode. Build the ready-to-say answer from its cited passage alone. When the source is brief, quote or closely translate the documented action and stop there. Do not add inferred motives, risks, causes, sequencing, duration, metrics or outcomes to the story. Identify missing details separately."
+                return "Choose one documented episode. Build the ready-to-say answer from its cited passage alone. When the source is brief, quote or closely translate the documented action as the factual portion. Do not add inferred motives, risks, causes, sequencing, duration, metrics or outcomes to the story. Put any suggested next step in a separate conditional proposal."
             }
             return "Answer in the first person only where the supplied personal-source excerpts support it. Cite [n] for each personal fact and identify any missing details."
         case .personal where !hasExtracts:
-            return "No relevant personal-base excerpt was found. Use only personal facts explicitly stated by Me in the session. If those are insufficient, state what is missing and offer a fill-in outline: situation → my actions → result → learning. Never turn an assistant draft or an interviewer suggestion into a fact about me."
+            return "No relevant personal-base excerpt was found. Use only personal facts explicitly stated by Me in the session. If those are insufficient, state the gap briefly, then propose a specific approach the user could take, in conditional language. Never turn an assistant draft or an interviewer suggestion into a fact about me."
         case .personal where format.isBehavioural:
-            return "Give a true, sourced first-person story in 4–6 lines: **Situation**, **My actions**, **Result**, **What I learned**. Use only the excerpts and my own session statements. Cite excerpts [1]. Include a metric only if a source supplies it; leave missing details out."
+            return "Give a true, sourced first-person story in 4–6 lines: **Situation**, **My actions**, **Result**, **What I learned**. Use only the excerpts and my own session statements. Cite excerpts [1]. Include a metric only if a source supplies it; keep missing details separate from a suggested response."
         case .personal: return "Give 2–4 first-person sentences ready to say, grounded in the supplied excerpts (cite [1]) and my own session statements. Verify stack and metrics against those sources. Clearly separate proposed next steps from completed work."
         case .opinion: return "Faithfully restate my documented opinion from the supplied opinion notes in 2–3 first-person sentences, with its reason and source [1]. Do not add an undocumented preference."
         case .technical, .none: return nil
