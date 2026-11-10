@@ -136,9 +136,9 @@ final class AssistController: ObservableObject {
         question.liveSnapshot = snapshot
         // A single complete working exchange also prevents the base plan's suffix(2) from
         // reducing a fragmented question to its closing acknowledgement.
-        let episode = session.previousEpisode(for: snapshot.focusText, context: frozenContext, live: snapshot)
-        question.episodeLookup = episode?.lookup
-        let plan = base.snapshotPlan(heard: [snapshot.focusText], conversation: snapshot.recentLines, episode: episode)
+        let episode = session.previousEpisode(for: snapshot.lookupText, context: frozenContext, live: snapshot)
+        question.episodeLookup = episode?.lookup ?? snapshot.restatedStory
+        let plan = base.snapshotPlan(heard: [snapshot.lookupText], conversation: snapshot.recentLines, episode: episode)
         let scope = settings.interviewScope
         session.assist(question, label: "Answer · latest speech", topic: nil, plan: { [weak self] in
             let fresh = await plan()

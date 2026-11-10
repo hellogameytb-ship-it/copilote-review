@@ -40,6 +40,9 @@ public struct AnswerPlan: Equatable, Sendable {
 
     /// The last two turns heard tell the kind: a follow-up alone ("et pourquoi ?") says too little.
     public static func make(heard: [String], base: PersonalBase?, conversation: [TranscriptLine] = [], interviewEvidence: InterviewEvidenceStore? = nil, episode: EpisodeReference? = nil, today: CalendarDay = .today()) async -> AnswerPlan {
+        guard heard.contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+            return AnswerPlan(format: AnswerFormat(kind: .none), extracts: [])
+        }
         if EpisodeReference.isFollowUp(heard.joined(separator: "\n")) {
             let format = AnswerFormat(kind: .personal)
             guard let episode else { return AnswerPlan(format: format, extracts: []) }

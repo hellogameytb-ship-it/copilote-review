@@ -35,8 +35,47 @@ enum DiagnosticPrivateEvidence {
             assist.submitAsk()
             return await wait(after: n)
         }
+        let restatementOnly = ProcessInfo.processInfo.arguments.contains("-RecetteRestatement")
+        let restatement = "Vous souhaitez que je raconte une situation où nous avons résolu un obstacle technique ?"
+        func oralAnswer(_ speech: [(Speaker, String)]) async -> String {
+            session.clearChat()
+            listening.beginRecetteConversation()
+            for (index, phrase) in speech.enumerated() {
+                let time = Double(index)
+                listening.receiveRecetteEvent(.line(TranscriptLine(speaker: phrase.0, text: phrase.1, start: time, end: time + 0.5), language: "fixture", latency: 0))
+            }
+            let count = await fake.conversations.count
+            assist.answerNow()
+            return await wait(after: count)
+        }
+        let sampleSpeech: [(Speaker, String)] = [(.me, "Bonsoir"), (.me, "Comment allez-vous ?"), (.me, restatement)]
+        if !live && restatementOnly {
+            let wire = await oralAnswer(sampleSpeech)
+            let ref = assist.context.includedExtracts.first
+            record("three finalized candidate phrases reach the Answer request", sampleSpeech.allSatisfy { wire.contains($0.1) })
+            record("Answer sends one verified CV episode with the candidate restatement", assist.context.includedExtracts.count == 1 && ref?.interviewRevision != nil && wire.contains("simulated delay"))
+            if let ref {
+                assist.toggle("extract-" + ref.source)
+                let excluded = await oralAnswer(sampleSpeech)
+                record("excluded episode stays out of the provider prompt", !excluded.contains("simulated delay"))
+                assist.includeAll()
+            }
+            let english = await oralAnswer([(.me, "So you want me to describe a time I faced a technical challenge, right?")])
+            record("English restatement reaches the same documented episode", english.contains("simulated delay"))
+            let separate = await oralAnswer([(.them, "Explain how a binary heap works."), (.me, restatement)])
+            record("direct interviewer question takes precedence", !separate.contains("simulated delay") && assist.context.includedExtracts.isEmpty)
+            let ordinary = await oralAnswer([(.me, "I faced a technical challenge on my project.")])
+            record("candidate account alone does not enable private evidence", !ordinary.contains("Recruiter CV") && assist.context.includedExtracts.isEmpty)
+            settings.baseMode = "off"
+            let disabled = await oralAnswer(sampleSpeech)
+            record("base off keeps the restatement source free", !disabled.contains("simulated delay") && assist.context.includedExtracts.isEmpty)
+            await listening.stop()
+            return
+        }
         if live {
-            let approved = InterviewEvidenceStore(database: database, root: base.root).snippets(for: question)
+            let example = TranscriptLine(speaker: .me, text: restatement, start: 1, end: 2)
+            let lookup = restatementOnly ? LiveAnswerSnapshot(lines: [example], context: AssistContext(lines: [example]), provisional: [])?.restatedStory ?? "" : question
+            let approved = InterviewEvidenceStore(database: database, root: base.root).snippets(for: lookup)
             guard settings.baseMode != "off", approved.count == 1, approved[0].source.hasPrefix("Recruiter CV"),
                   let executable = CodexAvailability.locate(), CodexAvailability.isReady(executable: executable) else {
                 record("live CV request has an available verified source and configured Codex", false)
@@ -53,6 +92,21 @@ enum DiagnosticPrivateEvidence {
             let model = UserDefaults.standard.string(forKey: "codexModel") ?? CodexProvider.defaultModel
             let fast = UserDefaults.standard.object(forKey: "codexFast") as? Bool ?? CodexLaunch.prefersFastTier(userConfig: try? CodexAvailability.userConfig())
             await fake.use(CodexProvider(server: server, answerModel: model, topicModel: CodexProvider.defaultModel, serviceTier: fast ? "priority" : nil))
+            if restatementOnly {
+                let wire = await oralAnswer(sampleSpeech)
+                let answer = session.lastFinished?.text ?? ""
+                let lower = answer.lowercased()
+                record("real Answer sends exactly the approved verified CV excerpt", assist.context.includedExtracts == approved && wire.contains(approved[0].text))
+                record("real Answer uses all three candidate-only phrases", sampleSpeech.allSatisfy { wire.contains($0.1) })
+                record("real provider completes the spoken story with a citation", !answer.isEmpty && answer.contains("[1]") && !session.isAnswering)
+                record("real Answer starts directly without a confirmation or hypothetical coaching",
+                       !lower.hasPrefix("yes") && !lower.contains("inferred question") && !lower.contains("i would describe") && !lower.contains("possible answer"))
+                let keyTerms = Set(BaseText.tokens(of: approved[0].text).filter { $0.count >= 5 })
+                record("real story uses specific terms from the authorized episode", keyTerms.intersection(BaseText.tokens(of: answer)).count >= 3)
+                await listening.stop()
+                record("no listening or visible app window after the injected trial", !listening.isListening && NSApp.windows.allSatisfy { !$0.isVisible })
+                return
+            }
             let wire = await ask(question)
             let answer = session.lastFinished?.text ?? ""
             record("live manual Ask submitted one bounded verified recruiter-CV entry", assist.context.includedExtracts == approved && wire.contains(approved[0].text))

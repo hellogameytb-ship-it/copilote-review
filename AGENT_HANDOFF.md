@@ -1,3 +1,11 @@
+# Build 27 — spoken question restatements
+
+Answer recognizes an explicit candidate restatement of an experience question in French or English. It can retrieve an authorized CV episode when the candidate is the only recorded speaker. A direct interviewer question takes priority. Ordinary candidate statements, third-party scenarios, negations and unconfirmed speech must not trigger private evidence retrieval. Existing source exclusions and the user’s base preference still apply.
+
+Upstream validation passed 380 Kit tests, 1,262 native checks, 29 profile checks, 15 preceding context checks, seven focused Answer checks and six checks of a live provider response. The end-to-end trial injected finalized speech into the app’s transcription controller and exercised the real CV lookup and Codex request. Hardware audio was outside the trial. The installed binary matched the approved candidate. This export uses synthetic wording and excludes private response artifacts.
+
+---
+
 # Build 26
 
 Build 26 preserves the sourced team episode on an individual-role follow-up. If the role is undocumented, each short spoken option has an explicit condition and uses only a task documented in that episode. If the individual role is sourced, the app answers directly. Private validation passed 378 framework tests and 1,262 native checks. The public export has not been independently rebuilt.

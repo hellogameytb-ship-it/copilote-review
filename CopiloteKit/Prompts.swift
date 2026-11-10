@@ -101,6 +101,13 @@ public enum Prompts {
         let manualAnswer = question.action == .answer && (question.typed || question.liveSnapshot != nil)
         let currentQuestion = question.liveSnapshot?.focusText ?? question.question ?? ""
         let hasEvidence = !context.includedExtracts.isEmpty || context.includedLines.contains { $0.speaker == .me } || !question.personalNotes.isEmpty
+        if manualAnswer, question.liveSnapshot?.restatedStory != nil {
+            parts.append("The candidate explicitly repeated the interviewer's request for a past experience. Answer that underlying request directly in the selected language. Skip the greetings, confirmation, translation and explanation of the question.")
+            if !context.includedExtracts.isEmpty {
+                parts.append("Give one short spoken paragraph about a single documented episode. Start with the actual situation, then the documented action and result if available. Use we for team work and I only for documented personal actions. Preserve qualifications, including simulated or cross-validated results, and cite the episode [n]. Use only facts in the excerpt. Finish with the story itself.")
+                return parts.joined(separator: "\n\n")
+            }
+        }
         if manualAnswer && hasEvidence && EpisodeReference.asksForRole(currentQuestion) {
             parts.append(personalRoleAnswer)
             return parts.joined(separator: "\n\n")

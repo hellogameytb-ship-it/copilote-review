@@ -39,8 +39,7 @@ public struct InterviewEvidenceStore: Sendable {
             return nil
         }
         guard !interviewer.isEmpty else { return all }
-        let acknowledgements: Set<String> = ["okay","ok","yes","right","thanks","oui","merci","d accord"]
-        return interviewer.last(where: { !acknowledgements.contains(BaseText.tokens(of: $0).joined(separator: " ")) }) ?? ""
+        return interviewer.last(where: { !LiveAnswerSnapshot.isSocial($0) }) ?? ""
     }
 
     private static let synonyms: [[String]] = [

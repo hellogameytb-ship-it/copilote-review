@@ -1,6 +1,6 @@
-# Build 26
+# Build 27
 
-Build 26 provides short, conditional past-tense options for interview follow-ups about an undocumented individual role.
+Answer can recognize explicit spoken restatements of interview questions in French and English. See the agent handoff for the evidence-selection rules and validation limits.
 
 # Copilote — source review snapshot
 

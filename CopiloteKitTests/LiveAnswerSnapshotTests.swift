@@ -150,4 +150,36 @@ final class LiveAnswerSnapshotTests: XCTestCase {
         XCTAssertTrue(snapshot.focusText.hasSuffix("Them (provisional): and when it is full"))
     }
 
+    func test_candidate_can_confirm_an_experience_question_in_either_language() throws {
+        for words in [
+            ["Bonsoir", "Comment allez-vous ?", "Vous souhaitez que je raconte une situation où nous avons résolu un obstacle technique ?"],
+            ["Si je comprends bien, vous me demandez de raconter une difficulté que j’ai surmontée."],
+            ["So you want me to talk about", "a time I encountered a technical problem, right?"],
+            ["Would you like me to describe a technical challenge that I faced?"]
+        ] {
+            let lines = words.enumerated().map { TranscriptLine(speaker: .me, text: $1, start: Double($0), end: Double($0) + 0.5) }
+            let snapshot = try XCTUnwrap(LiveAnswerSnapshot(lines: lines, context: AssistContext(lines: lines), provisional: []))
+            XCTAssertNotNil(snapshot.restatedStory, words.joined())
+            XCTAssertTrue(InterviewEvidenceStore.isPersonalRequest(snapshot.lookupText))
+        }
+    }
+
+    func test_ordinary_negated_unconfirmed_and_excluded_speech_do_not_authorize_evidence() throws {
+        for phrase in ["Bonsoir", "Comment allez-vous ?", "I faced a technical challenge.", "I don't want to tell you about a time I faced a challenge.",
+                       "Do you want me to describe a hypothetical technical challenge?", "Vous voulez que je vous explique un problème technique ?", "You want me to describe a time my colleague faced a challenge?"] {
+            let line = TranscriptLine(speaker: .me, text: phrase, start: 1, end: 2)
+            let snapshot = try XCTUnwrap(LiveAnswerSnapshot(lines: [line], context: AssistContext(lines: [line]), provisional: []))
+            XCTAssertEqual(snapshot.lookupText, "", phrase)
+        }
+        let ask = "You want me to describe a time I faced a challenge?"
+        let interim = try XCTUnwrap(LiveAnswerSnapshot(lines: [], context: AssistContext(), provisional: [.init(speaker: .me, text: ask)]))
+        XCTAssertEqual(interim.lookupText, "")
+        let lines = [TranscriptLine(speaker: .me, text: "Hello", start: 0, end: 1),
+                     TranscriptLine(speaker: .me, text: ask, start: 2, end: 3)]
+        var excluded = AssistContext(lines: lines)
+        excluded.toggle(try XCTUnwrap(excluded.items.last).id)
+        let snapshot = try XCTUnwrap(LiveAnswerSnapshot(lines: lines, context: excluded, provisional: [.init(speaker: .me, text: ask)]))
+        XCTAssertEqual(snapshot.lookupText, "")
+    }
+
 }

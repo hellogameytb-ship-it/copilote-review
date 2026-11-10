@@ -12,6 +12,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("app", type=Path)
 parser.add_argument("output", type=Path)
 parser.add_argument("--sha", required=True)
+parser.add_argument("--restatement", action="store_true")
 args = parser.parse_args()
 build = Path(__file__).resolve().parents[1] / "build"
 app, folder = args.app.resolve(), args.output.resolve()
@@ -37,8 +38,8 @@ with sqlite3.connect(folder / "evidence.sqlite") as db:
         label = file.name + (" · p. 1" if file == cv else " · preparation")
         db.execute("INSERT INTO evidence VALUES(?,?,?,?,?,?)", (key, topic, tags, passage, label, hashlib.sha256(file.read_bytes()).hexdigest()))
 with (folder / "run.log").open("w") as log:
-    subprocess.run([str(binary), "-CopiloteRecette", str(folder), "-RecetteAnchorOnly", "-RecetteEvidenceOnly"],
+    subprocess.run([str(binary), "-CopiloteRecette", str(folder), "-RecetteAnchorOnly", "-RecetteEvidenceOnly", *(["-RecetteRestatement"] if args.restatement else [])],
                    env={**os.environ, "COPILOTE_HEADLESS_GEOMETRY": "1"}, stdout=log, stderr=log, timeout=70, check=True)
 checks = json.loads((folder / "recette.json").read_text())["checks"]
 print(json.dumps({"checks": len(checks), "failures": [r["name"] for r in checks if not r["passed"]]}))
-assert len(checks) >= 8 and all(r["passed"] for r in checks)
+assert len(checks) >= (7 if args.restatement else 8) and all(r["passed"] for r in checks)
