@@ -14,6 +14,7 @@ public struct QueryIntent: Equatable, Sendable {
     public let isAddressed: Bool
     /// "Un projet qui t'a mis sous pression", "un échec", "un conflit": a story is expected.
     public let isBehavioral: Bool
+    let storyTerms: [QueryTerm]
     public let period: DateSpan?
     /// Content words (cue words, stop words and the period removed), then hints.
     public let terms: [QueryTerm]
@@ -36,6 +37,8 @@ public struct QueryIntent: Equatable, Sendable {
         }
         cueKinds = kinds
         isBehavioral = behavioral
+        let storyHints = Self.storyGroups.compactMap(\.hint)
+        storyTerms = hints.filter(storyHints.contains)
         let (period, periodPositions) = PeriodParser.period(in: tokens, today: today)
         consumed.formUnion(periodPositions)
 
@@ -100,8 +103,8 @@ public struct QueryIntent: Equatable, Sendable {
                  hint: QueryTerm(word: "conflit", alternatives: ["desaccord", "tension", "conflict", "disagree"])),
         CueGroup(kinds: [.project], cues: ["fierte", "fier", "fiere", "proud*", "reussite"].map(Cue.init),
                  hint: QueryTerm(word: "fierte", alternatives: ["fier", "reussite", "proud"])),
-        CueGroup(kinds: [.project], cues: ["difficile", "challenge*", "defi*", "tell me about a time"].map(Cue.init),
-                 hint: QueryTerm(word: "histoires", alternatives: ["pression", "deadline", "echec", "conflit", "desaccord", "fierte", "difficile"])),
+        CueGroup(kinds: [.project, .cv], cues: ["difficile", "challenge*", "defi*", "obstacle*", "setback*", "overcame", "tell me about a time"].map(Cue.init),
+                 hint: QueryTerm(word: "histoires", alternatives: ["challenge", "defi", "obstacle", "setback", "incident", "outage", "panne", "difficulte", "pression", "deadline", "echec", "conflit", "desaccord", "fierte", "difficile"])),
     ]
 
     static let cueGroups: [CueGroup] = storyGroups + [

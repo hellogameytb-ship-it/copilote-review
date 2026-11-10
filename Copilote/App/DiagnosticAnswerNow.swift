@@ -114,7 +114,7 @@ enum DiagnosticAnswerNow {
         check("rapid clicks keep latest response despite noncooperative late callback",session.lastFinished?.text == "NEW_INTENTION_RESPONSE" && session.answeringTopicID == nil)
         check("newest click takes its own immutable context",(await prompt()).contains("Explain hash tables instead."))
         await reset()
-        let profileContext=settings.infosysInterviewContext, profileActive=settings.infosysInterviewActive
+        let profileContext=settings.effectiveInstructions, profileActive=settings.technicalInterviewActive
         let longParts=(0..<10).map { "NINETY_SECOND_PART_\($0)_END: bounded queue constraint" }
         for (index,text) in longParts.enumerated() { line(text,100+Double(index)*10) }
         line("What do you think?",195)
@@ -128,7 +128,7 @@ enum DiagnosticAnswerNow {
         let acknowledged=await prompt()
         check("acknowledgement preserves the complete question and starts a fresh answer",await provider.conversations.count == 2 && acknowledged.contains(longParts[0]) && acknowledged.contains("does not replace the question"))
         let sentPreferences=await provider.conversations.last?.preferences
-        check("working-window Answer preserves active profile and its frozen preferences",settings.infosysInterviewContext == profileContext && settings.infosysInterviewActive == profileActive && provider.kind == .codex && sentPreferences == settings.answerPreferences)
+        check("working-window Answer preserves active profile and its frozen preferences",settings.effectiveInstructions == profileContext && settings.technicalInterviewActive == profileActive && provider.kind == .codex && sentPreferences == settings.answerPreferences)
 
         await reset()
         let threeMinuteParts=(0...18).map { "THREE_MINUTE_PART_\($0)_END: queue setup" }

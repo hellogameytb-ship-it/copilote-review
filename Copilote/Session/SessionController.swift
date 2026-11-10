@@ -58,6 +58,7 @@ final class SessionController: ObservableObject {
     private let overlay: OverlayController
     private let capturer: any ScreenCapturing
     private let regionSelector = RegionSelector()
+    private let searchWeb: @Sendable (String) async throws -> [WebSource]
     private let providers: ProviderController
 
     @Published private var stack = CaptureStack()
@@ -132,12 +133,14 @@ final class SessionController: ObservableObject {
         }
     }
 
-    init(settings: SettingsStore, overlay: OverlayController, capturer: any ScreenCapturing, providers: ProviderController) {
+    init(settings: SettingsStore, overlay: OverlayController, capturer: any ScreenCapturing, providers: ProviderController,
+         searchWeb: @escaping @Sendable (String) async throws -> [WebSource] = { try await WebResearch.search($0) }) {
         self.settings = settings
         stickyNotes = StickyNotesController(settings: settings)
         self.providers = providers
         self.overlay = overlay
         self.capturer = capturer
+        self.searchWeb = searchWeb
         overlay.setCounter(stack.summary)
         refreshShortcutHints()
         providers.onDiagnosticError = { [weak self] event in
@@ -480,6 +483,7 @@ final class SessionController: ObservableObject {
             if question.typed { return .ask }
             switch question.action { case .answer:return .manual;case .notes:return .notes;case .whatToSay:return .shortAnswer;case .questions:return .followUps }
         }()
+        let searchWeb = self.searchWeb
         let requestID = request.id
         request.task = Task { [weak self] in
             do {
@@ -500,7 +504,7 @@ final class SessionController: ObservableObject {
                 if case var .assist(question) = prepared, question.action == .answer,
                    let asked = question.question, WebResearch.needsSearch(asked) {
                     question.webAttempted = true
-                    question.webSources = (try? await WebResearch.search(asked)) ?? []
+                    question.webSources = (try? await searchWeb(asked)) ?? []
                     prepared = .assist(question)
                 }
                 try Task.checkCancellation()

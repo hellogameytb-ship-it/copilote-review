@@ -33,11 +33,10 @@ enum DiagnosticChat {
         let pill = overlay.pillFrame
         let panel = NSApp.windows.first { $0.windowNumber == overlay.windowNumbers[1] }
         let frame = panel?.frame
-        settings.infosysInterviewActive = true
-        settings.infosysInterviewContext = String(String(repeating:"FICTIONAL_PROFILE ",count:500).prefix(7847))
+        settings.technicalInterviewActive = true
         let notesBefore = session.stickyNotes.notes
-        let contextBefore = settings.infosysInterviewContext
-        let profileBefore = settings.infosysInterviewActive
+        let contextBefore = settings.effectiveInstructions
+        let profileBefore = settings.technicalInterviewActive
         let preferencesBefore = settings.answerPreferences
         let stealthBefore = settings.stealth
         line("OLD_AUDIO_SECRET",1)
@@ -103,7 +102,7 @@ enum DiagnosticChat {
         _ = await js("(() => { document.getElementById('clear-chat').click(); document.getElementById('confirm-clear').click(); return true; })()")
         await pause(450)
         check("confirmed clear removes chat and ignores all late callbacks",await boolean("document.querySelectorAll('.chat-entry').length === 0 && !document.getElementById('reset-notice').hidden") && session.history.isEmpty && session.cardAnswers.isEmpty && session.lastFinished == nil)
-        check("clear retains pending captures, notes, profile and preferences",session.stackImages == captures && session.stickyNotes.notes == notesBefore && settings.infosysInterviewContext == contextBefore && settings.infosysInterviewActive == profileBefore && settings.answerPreferences == preferencesBefore && settings.stealth == stealthBefore)
+        check("clear retains pending captures, notes, profile and preferences",session.stackImages == captures && session.stickyNotes.notes == notesBefore && settings.effectiveInstructions == contextBefore && settings.technicalInterviewActive == profileBefore && settings.answerPreferences == preferencesBefore && settings.stealth == stealthBefore)
         check("clear preserves excluded pending screenshot choices",assist.context.items.filter { $0.kind == .capture }.allSatisfy { !$0.isIncluded })
         check("clear leaves listening running with fresh context",listening.isListening && !listening.isPaused && listening.transcript.lines.isEmpty && listening.topics.isEmpty && listening.sessionLines.isEmpty)
         line("LATE_OLD_AUDIO",1)

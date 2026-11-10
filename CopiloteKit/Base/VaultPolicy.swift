@@ -3,7 +3,7 @@ import Foundation
 /// Obsidian is an input only. The index stays outside the vault; attachments, configuration,
 /// credentials and symlinks are never ingested. Suspect notes are excluded as a whole.
 public enum VaultPolicy {
-    public static let indexPolicy = "vault-readonly-v4"
+    public static let indexPolicy = "vault-readonly-v5"
 
     /// Explicit document names retain their meaning at any depth in an Obsidian vault.
     public static func documentKind(for path: String) -> BaseKind? {
@@ -15,7 +15,7 @@ public enum VaultPolicy {
             let folders = path.split(separator: "/").dropLast().map { component in
                 String(component).lowercased().trimmingCharacters(in: CharacterSet.decimalDigits.union(.punctuationCharacters).union(.whitespaces))
             }
-            if folders.contains("projects") || folders.contains("projets") { return .project }
+            if !Set(folders).isDisjoint(with: ["project", "projects", "projet", "projets"]) { return .project }
             return BaseChunker.kind(forPath: path)
         }
     }

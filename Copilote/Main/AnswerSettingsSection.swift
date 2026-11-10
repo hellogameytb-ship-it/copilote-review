@@ -7,11 +7,8 @@ struct AnswerSettingsSection: View {
 
     var body: some View {
         Section("Interview profile") {
-            Toggle("Infosys — Technical interview", isOn: $settings.infosysInterviewActive)
-            Text("English answers with sourced candidate context. Return to Normal to remove this profile from future requests; earlier answers remain available. Role, team and stack stay unknown unless sourced. For preparation and assistance allowed by the interviewer.").font(.caption)
-            TextEditor(text: $settings.infosysInterviewContext).frame(minHeight: 80, maxHeight: 160)
-            Text("Sourced context · first 8,000 characters used. Keep uncertainties and source references. No latency gain has been measured.").font(.caption)
-            Text("Excel notes are archived privately. Open Excel archive from the notes bar to consult them; they are excluded from AI requests.").font(.caption)
+            Toggle("Technical interview", isOn: $settings.technicalInterviewActive)
+            Text("Answer in English using relevant excerpts from the CV and projects in your personal base. When a detail is missing, the answer says so.").font(.caption)
         }
         Section(Copy.Settings.answersSection) {
             VStack(alignment: .leading, spacing: 6) {

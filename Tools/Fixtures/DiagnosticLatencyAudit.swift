@@ -150,9 +150,9 @@ enum DiagnosticLatencyAudit {
         assist.run(.answer)
         record("Answer button regenerates even when card cache exists",await until { await provider.conversations.count == 2 && !session.isAnswering })
         record("regenerated Answer incorporates new context",(await latestPrompt()).contains("NEW_CONTEXT_AFTER_CACHE"))
-        settings.infosysInterviewActive = true
+        settings.technicalInterviewActive = true
         record("profile scope invalidates cache",!session.hasCachedRequest(for:old))
-        settings.infosysInterviewActive = false
+        settings.technicalInterviewActive = false
         findings.append(["scenario":"cache","observedClickPlus20msWaitMS":cacheMS,"sameVersionReuses":true,"titleOnlyReuses":true,"followUpVersionInvalidates":true,"newMicrophoneContextInvalidates":false,"profileScopeInvalidates":true,"AnswerButtonRegenerates":true])
 
         await reset()

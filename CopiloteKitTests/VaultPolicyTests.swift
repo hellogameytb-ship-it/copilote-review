@@ -5,6 +5,8 @@ final class VaultPolicyTests: XCTestCase {
     func test_numberedProjectFoldersRetainProjectKindWithoutOverridingCV() {
         XCTAssertEqual(VaultPolicy.documentKind(for: "02 Projects/Orion/overview.md"), .project)
         XCTAssertEqual(VaultPolicy.documentKind(for: "Career/03 - Projets/Orion.md"), .project)
+        XCTAssertEqual(VaultPolicy.documentKind(for: "projet/Atlas.md"), .project)
+        XCTAssertEqual(VaultPolicy.documentKind(for: "01 Project/Atlas/Design.md"), .project)
         XCTAssertEqual(VaultPolicy.documentKind(for: "Projects/Personal/CV.md"), .cv)
         XCTAssertEqual(VaultPolicy.documentKind(for: "Projects/Personal/avis.md"), .opinion)
     }
@@ -34,7 +36,35 @@ final class VaultPolicyTests: XCTestCase {
         let snippets = await base.snippets(for: "Résume mon CV et mon parcours professionnel")
         XCTAssertFalse(snippets.isEmpty)
         XCTAssertTrue(snippets.allSatisfy { $0.source.contains(path) })
+        let englishPlan = await AnswerPlan.make(heard: ["Walk me through your CV and professional experience."], base: base)
+        XCTAssertTrue(englishPlan.extracts.contains { $0.source.contains(path) })
         XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), cv)
+    }
+
+    func test_technicalInterviewRetrievesSingularProjectFolderAndCitesItsSource() async throws {
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let root = temp.appendingPathComponent("Brain")
+        let project = root.appendingPathComponent("projet/Atlas.md")
+        let source = "# Atlas\n## Implementation\nThe candidate built a local scheduler with Swift."
+        try FileManager.default.createDirectory(at: project.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try source.write(to: project, atomically: true, encoding: .utf8)
+        let store = temp.appendingPathComponent("cache")
+        let index = try BaseIndex(url: store.appendingPathComponent("index.sqlite"))
+        try index.setMeta("inputPolicy", "vault-readonly-v4")
+        _ = try await BaseIndexer(index: index, embedder: NoEmbedder(), store: store).run(BaseSource(root: root))
+        let base = PersonalBase(search: BaseSearch(index: index, embedder: NoEmbedder()), index: index, root: root)
+        let asked = "Describe your project Atlas and its implementation."
+        let plan = await AnswerPlan.make(heard: [asked], base: base)
+        XCTAssertTrue(plan.extracts.contains { $0.source.contains("projet/Atlas.md") && $0.text.contains("Swift") })
+        var conversation = Conversation()
+        conversation.preferences.technicalInterview = true
+        conversation.appendUser(.assist(AssistQuestion(action: .answer, mode: .technical, question: asked, heard: [],
+            context: AssistContext(extracts: plan.extracts), typed: true, format: plan.format)))
+        let wire = CodexPrompt.turnInput(for: conversation).compactMap { $0["text"]?.stringValue }.joined()
+        XCTAssertTrue(wire.contains("projet/Atlas.md"))
+        XCTAssertTrue(wire.contains("[1]"))
+        XCTAssertEqual(try String(contentsOf: project, encoding: .utf8), source)
     }
 
     func test_readsNestedObsidianNotesWithoutWritingSourceOrIndexingSecrets() async throws {

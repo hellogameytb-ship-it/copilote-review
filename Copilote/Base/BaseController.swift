@@ -55,9 +55,10 @@ final class BaseController: ObservableObject {
             .appendingPathComponent("Copilote/Base", isDirectory: true)
     }
 
-    init(settings: SettingsStore, providers: ProviderController) {
+    init(settings: SettingsStore, providers: ProviderController, personal: PersonalBase? = nil) {
         self.settings = settings
         self.providers = providers
+        self.personal = personal
     }
 
     var isReadOnly: Bool { VaultPolicy.isVault(root) }

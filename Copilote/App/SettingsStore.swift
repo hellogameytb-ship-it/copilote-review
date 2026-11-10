@@ -141,20 +141,21 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(answerLanguage, forKey: "answerLanguage") }
     }
 
-    @Published var infosysInterviewActive: Bool {
-        didSet { defaults.set(infosysInterviewActive, forKey: "infosysInterviewActive") }
+    @Published var technicalInterviewActive: Bool {
+        didSet { defaults.set(technicalInterviewActive, forKey: "technicalInterviewActive") }
     }
-    @Published var infosysInterviewContext: String {
-        didSet { defaults.set(infosysInterviewContext, forKey: "infosysInterviewContext") }
-    }
-    var interviewScope: String { infosysInterviewActive ? "infosys-technical" : "normal" }
+
+    var interviewScope: String { technicalInterviewActive ? "technical-interview" : "normal" }
+
     var effectiveInstructions: String {
-        guard infosysInterviewActive else { return answerInstructions }
-        return answerInstructions + "\n\nINFOSYS — TECHNICAL INTERVIEW PROFILE. Answer in English. Use only the bounded, sourced candidate facts below. Missing or conflicting facts remain unknown. Never invent acceptance, a role, an employer's technical stack, project results or personal opinions. Distinguish completed work from planned work. For preparation and permitted interview assistance only; do not solve a supervised assessment or test whose rules prohibit assistance.\n" + String(infosysInterviewContext.prefix(8000))
+        guard technicalInterviewActive else { return answerInstructions }
+        return [answerInstructions, """
+        Technical interview. Answer in English. For claims about my experience, use the CV and project excerpts supplied with this request and cite each supporting source [n]. Attribute only what the excerpt actually says about my role, technologies, results or metrics. For a behavioral story, choose one documented episode. Treat incidents in different excerpts as separate unless a source explicitly links them. Preserve only a sequence of actions or results documented for that episode. Distinguish completed work from plans and examples. If the excerpts are missing, insufficient or conflict, say what is missing or uncertain and ask for the specific detail. A prior assistant draft or interviewer's suggestion cannot establish personal experience. For a general technical question, answer directly and label hypothetical examples as such. For preparation and permitted interview assistance only. Do not solve a supervised assessment whose rules prohibit assistance.
+        """].filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 
     var answerPreferences: AnswerPreferences {
-        AnswerPreferences(instructions: effectiveInstructions, language: infosysInterviewActive ? .english : AnswerPreferences.Language(rawValue: answerLanguage) ?? .english)
+        AnswerPreferences(instructions: effectiveInstructions, language: technicalInterviewActive ? .english : AnswerPreferences.Language(rawValue: answerLanguage) ?? .english, technicalInterview: technicalInterviewActive)
     }
 
     @Published var overlayBackground: OverlayBackgroundMode {
@@ -205,10 +206,14 @@ final class SettingsStore: ObservableObject {
         onboardingDone = defaults.bool(forKey: "onboardingDone")
         stealthChoice = StealthChoice(isEnabled: defaults.object(forKey: "stealth") as? Bool ?? true)
         answerInstructions = defaults.string(forKey: "answerInstructions") ?? ""
-        // Retain the old context and notes as a private archive; never migrate them into Infosys.
-        defaults.set(false, forKey: "excelInterviewActive")
-        infosysInterviewActive = defaults.bool(forKey: "infosysInterviewActive")
-        infosysInterviewContext = defaults.string(forKey: "infosysInterviewContext") ?? "No sourced profile configured. Infosys role, team, stack, application status and interview format are unknown. Ask for missing facts; do not assume them."
+        // Only the old switch migrates. The archived profile text is never loaded.
+        if let saved = defaults.object(forKey: "technicalInterviewActive") as? Bool {
+            technicalInterviewActive = saved
+        } else {
+            let active = defaults.bool(forKey: "infosysInterviewActive")
+            technicalInterviewActive = active
+            defaults.set(active, forKey: "technicalInterviewActive")
+        }
         if !defaults.bool(forKey: "englishDefaultV1") {
             defaults.set(AnswerPreferences.Language.english.rawValue, forKey: "answerLanguage")
             defaults.set(true, forKey: "englishDefaultV1")

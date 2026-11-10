@@ -52,7 +52,7 @@ enum DiagnosticRecette {
         let overlay = OverlayController(settings: settings)
         let fixtureCapturer = DiagnosticCaptureButton.Capturer()
         let captureSource: any ScreenCapturing = DiagnosticAnchorFixture.isRequested ? fixtureCapturer : ScreenCapturer()
-        let session = SessionController(settings: settings, overlay: overlay, capturer: captureSource, providers: providers)
+        let session = SessionController(settings: settings, overlay: overlay, capturer: captureSource, providers: providers, searchWeb: { _ in [] })
         let listening = ListeningController(settings: settings, providers: providers, base: base)
         StealthConfirmationController.observeSession(listening)
         SystemDialogs.observe(listening, defaults: settings.defaults)
@@ -102,6 +102,7 @@ enum DiagnosticRecette {
                 await DiagnosticChat.run(folder:folder,overlay:overlay,settings:settings,listening:listening,assist:assist,session:session,provider:fake,record:record)
                 await DiagnosticComposerPaste.run(folder:folder,overlay:overlay,settings:settings,assist:assist,session:session,provider:fake,record:record)
                 await DiagnosticRequestReliability.run(folder:folder,overlay:overlay,settings:settings,listening:listening,assist:assist,session:session,providers:providers,provider:fake,record:record)
+                await DiagnosticOpenQuestions.run(folder: folder, settings: settings, listening: listening, assist: assist, session: session, fake: fake, record: record)
                 defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
             }
             if args.contains("-RecetteFileBrowserOnly") {
@@ -113,7 +114,7 @@ enum DiagnosticRecette {
                 defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
             }
             if args.contains("-RecetteProfileOnly") {
-                await DiagnosticInterviewProfile.run(settings: settings, session: session, fake: fake, record: record)
+                await DiagnosticInterviewProfile.run(folder: folder, settings: settings, session: session, overlay: overlay, providers: providers, fake: fake, record: record)
                 defaults.removePersistentDomain(forName: suite); NSApp.terminate(nil); return
             }
             if args.contains("-RecetteAppearanceOnly") {

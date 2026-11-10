@@ -20,7 +20,7 @@ enum DiagnosticRequestReliability {
         WindowPrivacy.authorizeFromUserGesture();overlay.present();overlay.reveal()
         let panel=NSApp.windows.first { $0.windowNumber == overlay.windowNumbers[1] }
         let frame=panel?.frame,pill=overlay.pillFrame
-        let notes=session.stickyNotes.notes,profile=settings.infosysInterviewContext,prefs=settings.answerPreferences
+        let notes=session.stickyNotes.notes,profile=settings.effectiveInstructions,prefs=settings.answerPreferences
         await provider.replyNext("PREVIOUS_SUCCESSFUL_ANSWER")
         assist.askText="Synthetic first question";assist.submitAsk();await finish()
         let previous=session.lastFinished
@@ -64,7 +64,7 @@ enum DiagnosticRequestReliability {
         await provider.replyNext("EXPLICIT_RECOVERY_ANSWER")
         assist.askText="Retry explicitly";assist.submitAsk();await finish()
         check("explicit request recovers without switching provider",session.lastFinished?.text == "EXPLICIT_RECOVERY_ANSWER" && provider.kind == .codex)
-        check("error handling preserves profile notes and answer preferences",settings.infosysInterviewContext == profile && session.stickyNotes.notes == notes && settings.answerPreferences == prefs)
+        check("error handling preserves profile notes and answer preferences",settings.effectiveInstructions == profile && session.stickyNotes.notes == notes && settings.answerPreferences == prefs)
         check("reliability fixture never takes focus displays windows or starts listening",!NSApp.isActive && NSApp.windows.allSatisfy { !$0.isVisible && !$0.isKeyWindow } && !listening.isListening)
         try? JSONSerialization.data(withJSONObject:["checks":checks,"liveAIRequests":0,"desktopCaptured":false,"audioCaptured":false,"privateInterviewDataUsed":false,"generalPasteboardUsed":false],options:[.prettyPrinted,.sortedKeys]).write(to:folder.appendingPathComponent("request-reliability.json"))
         session.clear();session.latestProviderDiagnostic=nil;overlay.hide()

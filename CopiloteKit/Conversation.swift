@@ -55,8 +55,9 @@ public struct Conversation: Equatable, Sendable {
     }
 
     public mutating func appendUser(_ input: UserInput) {
-        var content = Self.content(for: input)
-        if let mode, let style = Prompts.style(for: input, mode: mode), case let .string(text)? = content.last?["text"] {
+        var content = Self.content(for: input, technicalInterview: preferences.technicalInterview)
+        let answerMode = preferences.technicalInterview ? MeetingMode.technical : mode
+        if let answerMode, let style = Prompts.style(for: input, mode: answerMode), case let .string(text)? = content.last?["text"] {
             content[content.count - 1] = ["type": "text", "text": .string(text + "\n\n" + style)]
         }
         turns.append(["role": "user", "content": .array(content)])
@@ -71,7 +72,7 @@ public struct Conversation: Equatable, Sendable {
         turns.removeAll()
     }
 
-    private static func content(for input: UserInput) -> [JSONValue] {
+    private static func content(for input: UserInput, technicalInterview: Bool) -> [JSONValue] {
         switch input {
         case let .screenshots(images):
             return images.map(imageBlock) + [textBlock(Prompts.screenshotsInstruction(count: images.count))]
@@ -82,7 +83,7 @@ public struct Conversation: Equatable, Sendable {
         case let .topic(question):
             return question.screenshots.map(imageBlock) + [textBlock(Prompts.topicInstruction(question))]
         case let .assist(question):
-            return question.context.includedCaptures.map(imageBlock) + [textBlock(Prompts.assistInstruction(question))]
+            return question.context.includedCaptures.map(imageBlock) + [textBlock(Prompts.assistInstruction(question, technicalInterview: technicalInterview))]
         }
     }
 

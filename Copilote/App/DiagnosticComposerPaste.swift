@@ -58,7 +58,7 @@ enum DiagnosticComposerPaste {
         }
         let initialFrame=panel.frame
         var pasteGeometry:[String:Any]=[:]
-        let profile=settings.infosysInterviewContext, active=settings.infosysInterviewActive
+        let profile=settings.effectiveInstructions, active=settings.technicalInterviewActive
         let prefs=settings.answerPreferences, notes=session.stickyNotes.notes, stealth=settings.stealth
         draft("Keep my draft",selection:NSRange(location:5,length:2))
         // Let the new hosting view establish its intrinsic size before measuring a paste.
@@ -144,7 +144,7 @@ enum DiagnosticComposerPaste {
         for item in assist.context.items where item.kind == .capture { assist.toggle(item.id) }
         session.pasteImages(ComposerImagePaste(images:[green],skipped:0));session.clearChat();await settle();assist.refresh()
         check("Clear chat retains pending images and existing exclusions",session.stackImages == [redImage!,greenImage!] && assist.context.items.contains { $0.kind == .capture && !$0.isIncluded })
-        check("paste preserves profile, notes, preferences and Stealth",settings.infosysInterviewContext == profile && settings.infosysInterviewActive == active && settings.answerPreferences == prefs && session.stickyNotes.notes == notes && settings.stealth == stealth)
+        check("paste preserves profile, notes, preferences and Stealth",settings.effectiveInstructions == profile && settings.technicalInterviewActive == active && settings.answerPreferences == prefs && session.stickyNotes.notes == notes && settings.stealth == stealth)
         check("no paste action sends automatically",await provider.conversations.count == 0)
         session.sendCaptures()
         for _ in 0..<200 { if !session.isAnswering { break };try? await Task.sleep(for:.milliseconds(5)) }

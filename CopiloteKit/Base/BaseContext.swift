@@ -17,8 +17,26 @@ public enum BaseContext {
     static let maxLength = 400
 
     /// The best items first.
-    public static func snippets(from items: [BaseItem]) -> [BaseSnippet] {
-        items.filter { !VaultPolicy.containsSecrets($0.text) && VaultPolicy.allows(path: $0.source) }.prefix(maxSnippets).map { BaseSnippet(source: "\($0.label) (\($0.source))", text: cut(body(of: $0), maxLength)) }
+    public static func snippets(from items: [BaseItem], focusingOn terms: [QueryTerm] = []) -> [BaseSnippet] {
+        items.filter { !VaultPolicy.containsSecrets($0.text) && VaultPolicy.allows(path: $0.source) }.prefix(maxSnippets).map { BaseSnippet(source: "\($0.label) (\($0.source))", text: excerpt(body(of: $0), terms: terms)) }
+    }
+
+    /// In a long section, include the passage that justified retrieving the story.
+    private static func excerpt(_ text: String, terms: [QueryTerm]) -> String {
+        let start = cut(text, maxLength)
+        guard text.count > maxLength, !terms.isEmpty,
+              !terms.contains(where: { $0.matches(BaseText(start)) }) else { return start }
+        var match: String.Index?
+        text.enumerateSubstrings(in: text.startIndex..<text.endIndex, options: .byWords) { word, range, _, stop in
+            if let word, terms.contains(where: { $0.matches(BaseText(word)) }) {
+                match = range.lowerBound
+                stop = true
+            }
+        }
+        guard let match else { return start }
+        let left = text.index(match, offsetBy: -80, limitedBy: text.startIndex) ?? text.startIndex
+        let boundary = text[left..<match].firstIndex(where: \.isWhitespace) ?? match
+        return "…" + cut(String(text[boundary...]).trimmingCharacters(in: .whitespacesAndNewlines), maxLength - 1)
     }
 
     /// An item's text without the title and section lines the chunker put first.

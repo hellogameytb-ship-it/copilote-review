@@ -98,10 +98,12 @@ public struct AnswerPreferences: Equatable, Sendable {
     /// Who the user is talking to, about what, how to answer: "Entretien de stage SWE, réponses courtes".
     public var instructions: String
     public var language: Language
+    public var technicalInterview: Bool
 
-    public init(instructions: String = "", language: Language = .english) {
+    public init(instructions: String = "", language: Language = .english, technicalInterview: Bool = false) {
         self.instructions = instructions
         self.language = language
+        self.technicalInterview = technicalInterview
     }
 }
 

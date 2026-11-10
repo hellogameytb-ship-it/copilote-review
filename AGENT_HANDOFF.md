@@ -1,3 +1,11 @@
+# Build 23 — general technical interviews
+
+The selectable English technical interview profile uses sourced CV and project excerpts. It archives the old employer profile and migrates the enabled setting. Normal restores ordinary language and answer preferences. General and technical questions can proceed without personal excerpts. Ask accepts unfamiliar phrasings. Answer retains the two-minute working conversation.
+
+The reviewed candidate passed 361 framework tests and 1,262 native checks. Upstream also exercised a technical question with a live model and compared personal responses using synthetic evidence. The installed app subsequently retrieved five excerpts for an open challenge question but selected a remark that did not establish actions or a result. Relevant-source retrieval and the factual quality of the selected episode need separate checks. This source export omits personal materials and signing identities, and is not independently rebuilt.
+
+---
+
 # Current update — build 22: Answer context and request reliability
 
 Answer now freezes the full two-minute conversation at the click, without a three-fragment limit. The preceding two-to-five-minute band completes long statements; older session material supplies relevant background without duplication. Recent substantive questions take priority over old topics; acknowledgements and short follow-ups retain their context. No extra model call is used to select context. Exclusions, Clear chat boundaries, private profile isolation and fresh-response behavior remain intact.

@@ -43,9 +43,9 @@ struct OverlayBody: View {
                 }.padding(10).background(Color.black.opacity(0.2))
             }
             HStack {
-                Text(settings.infosysInterviewActive ? "Infosys — Technical interview" : "Profile · Normal").font(.system(size: 11, weight: .semibold))
+                Text(settings.technicalInterviewActive ? "Technical interview" : "Profile · Normal").font(.system(size: 11, weight: .semibold))
                 Spacer()
-                Button(settings.infosysInterviewActive ? "Return to Normal" : "Infosys — Technical interview") { settings.infosysInterviewActive.toggle() }.buttonStyle(.plain)
+                Button(settings.technicalInterviewActive ? "Return to Normal" : "Technical interview") { settings.technicalInterviewActive.toggle() }.buttonStyle(.plain)
             }.padding(.horizontal, 12).padding(.vertical, 5)
             if let event=session.latestProviderDiagnostic {
                 VStack(alignment:.leading,spacing:3) {
