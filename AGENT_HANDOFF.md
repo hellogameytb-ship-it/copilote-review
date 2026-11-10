@@ -1,3 +1,7 @@
+# Build 26
+
+Build 26 preserves the sourced team episode on an individual-role follow-up. If the role is undocumented, each short spoken option has an explicit condition and uses only a task documented in that episode. If the individual role is sourced, the app answers directly. Private validation passed 378 framework tests and 1,262 native checks. The public export has not been independently rebuilt.
+
 # Build 25 — follow-ups on a sourced experience
 
 When an interviewer asks a follow-up about a previously discussed experience, Ask and Answer can recover the current episode and revalidate its source. Preserve document revision checks, user exclusions, chat clearing, and profile boundaries whenever modifying the retrieval path. A suggested action must remain distinguishable from an action the candidate actually took.

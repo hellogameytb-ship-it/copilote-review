@@ -1,3 +1,7 @@
+# Build 26
+
+Build 26 provides short, conditional past-tense options for interview follow-ups about an undocumented individual role.
+
 # Copilote — source review snapshot
 
 Native macOS conversation assistance in Swift, SwiftUI and AppKit. Build 25 revalidates source passages across interview follow-ups and distinguishes suggestions from documented actions. See the handoff for source renewal and validation. See [AGENT_HANDOFF.md](AGENT_HANDOFF.md) for changes, architecture, validation and remaining limits.

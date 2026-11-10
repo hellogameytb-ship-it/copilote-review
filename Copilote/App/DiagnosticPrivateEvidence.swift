@@ -102,12 +102,21 @@ enum DiagnosticPrivateEvidence {
             let roleAnswer = session.lastFinished?.text.lowercased() ?? ""
             record("live personal-role follow-up carries the exact revalidated ML episode and the preceding answer",
                    assist.context.includedExtracts == approved && linked.contains(approved[0].text) && linked.contains(String(answer.prefix(80))))
-            record("live personal-role reply separates a conditional suggestion from cited evidence",
-                   roleAnswer.contains("[1]") && roleAnswer.contains("possible answer") && roleAnswer.contains("only if accurate") &&
-                   (roleAnswer.contains("would") || roleAnswer.contains("could") || roleAnswer.contains("if ")))
-            record("live factual portion and proposal avoid claiming unverified personal actions",
-                   !claimsIndividualWork(roleAnswer) && startsWithConditional(roleAnswer))
-            record("live role suggestion gives a specific actionable step", hasConcreteProposal(roleAnswer))
+            let lines = roleAnswer.split(whereSeparator: \.isNewline).map(String.init)
+            let options = lines.filter { $0.contains("if you ") }
+            let optionPattern = #"^[\s>*•–-]*if you [^:\n]+:\s*[*_]*\s*["“]i (?:[a-z]+ed|built|wrote|ran|led|chose|set|put|did|made|took)\b"#
+            let everyQuoteIsConditional = options.allSatisfy { $0.range(of: optionPattern, options: .regularExpression) != nil }
+            let outsideOptions = lines.filter { !$0.contains("if you ") }.joined(separator: " ")
+            record("one or two short past-tense role options with a condition before each quote",
+                   (1...2).contains(options.count) && everyQuoteIsConditional && !roleAnswer.contains("i would") && !roleAnswer.contains("i could"))
+            record("role reply cites team evidence without assigning an individual action outside a condition",
+                   roleAnswer.contains("[1]") && !claimsIndividualWork(outsideOptions) && !outsideOptions.contains("“i "))
+            record("role options stay concise and use episode vocabulary",
+                   outsideOptions.split(whereSeparator: \.isWhitespace).count <= 16 && options.allSatisfy {
+                       $0.split(whereSeparator: \.isWhitespace).count <= 25 && !$0.contains("[1]") &&
+                       ["imbalanc", "weight", "minority", "rarest", "recall", "macro", "loss", "cross-validation"].contains(where: $0.contains) &&
+                       !substantive.intersection(BaseText.tokens(of: $0)).isEmpty
+                   } && (!roleAnswer.contains("stratified") || evidence.contains("stratified")))
             record("live follow-up does not introduce an unsupported numerical result", numbers(roleAnswer).isSubset(of: numbers(evidence)))
             settings.technicalInterviewActive = false
             session.clear()
@@ -118,6 +127,16 @@ enum DiagnosticPrivateEvidence {
                    proposal.contains("possible answer") && proposal.contains("only if accurate") &&
                    (proposal.contains("would") || proposal.contains("could") || proposal.contains("if ")))
             record("live no-source suggestion gives a specific actionable step", hasConcreteProposal(proposal) && !claimsIndividualWork(proposal) && startsWithConditional(proposal))
+            session.clear()
+            listening.beginRecetteConversation()
+            let documented = "For the Cedar import project, I wrote the duplicate-record check."
+            listening.receiveRecetteEvent(.line(TranscriptLine(speaker: .me, text: documented, start: 1, end: 2), language: "fixture", latency: 0))
+            let knownWire = await ask(role)
+            let direct = session.lastFinished?.text.lowercased() ?? ""
+            record("an explicitly stated role yields one short direct spoken answer",
+                   knownWire.contains(documented) && direct.contains("i wrote") && direct.contains("duplicate") &&
+                   !direct.contains("if you") && !direct.contains("i would") && direct.split(whereSeparator: \.isWhitespace).count <= 24)
+            await listening.stop()
             record("live run has no visible app windows or ongoing listening", !listening.isListening && NSApp.windows.allSatisfy { !$0.isVisible })
             session.clear()
             return
@@ -128,7 +147,7 @@ enum DiagnosticPrivateEvidence {
         record("Ask cites recruiter CV with grouped team and simulation evidence", initial.contains("Recruiter CV") && initial.contains("simulated delay") && initial.contains("team tested") && !initial.contains("UNRELATED_DIPLOMA"))
         let linked = await ask(role)
         record("Ask follows the prior team episode and supplies conditional guidance",
-               linked.contains("simulated delay") && linked.contains("PRIVATE_PREVIOUS_ANSWER_MARKER") && linked.contains(label))
+               linked.contains("simulated delay") && linked.contains("PRIVATE_PREVIOUS_ANSWER_MARKER") && linked.contains("condition BEFORE the spoken quote"))
         let again = await ask("And what was the outcome?")
         record("chained follow-up stays on the original episode", again.contains("simulated delay") && assist.context.includedExtracts.count == 1)
         if let first = assist.context.items.first(where: { $0.kind == .extract }) { assist.toggle(first.id) }
@@ -152,7 +171,7 @@ enum DiagnosticPrivateEvidence {
         let nextCount = await fake.conversations.count
         assist.answerNow()
         let spoken = await wait(after: nextCount)
-        record("Answer revalidates the prior episode for a spoken personal-role follow-up", spoken.contains("simulated delay") && spoken.contains(label))
+        record("Answer revalidates the prior episode for a spoken personal-role follow-up", spoken.contains("simulated delay") && spoken.contains("condition BEFORE the spoken quote"))
         listening.receiveRecetteEvent(.line(TranscriptLine(speaker: .them, text: "New topic: explain database isolation.", start: 5, end: 6), language: "fixture", latency: 0))
         let moved = await ask(role)
         record("a new spoken subject prevents a typed follow-up from reusing the older project",

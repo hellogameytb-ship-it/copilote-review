@@ -23,6 +23,20 @@ final class EpisodeFollowUpTests: XCTestCase {
             XCTAssertFalse(wire.contains("offer a fill-in outline"))
         }
     }
+
+    func test_role_question_with_evidence_uses_past_tense_options_without_hypothetical_guidance() {
+        let context = AssistContext(extracts: [BaseSnippet(source: "Cedar", text: "Our team checked duplicate records.")])
+        for technical in [false, true] {
+            for question in ["What did you personally do?", "Quel était ton rôle ?"] {
+                let request = AssistQuestion(action: .answer, mode: .technical, question: question, heard: [], context: context, typed: true)
+                let wire = Prompts.assistInstruction(request, technicalInterview: technical)
+                XCTAssertTrue(wire.contains(Prompts.personalRoleAnswer))
+                XCTAssertFalse(wire.contains(Prompts.possibleAnswer))
+            }
+        }
+        XCTAssertFalse(EpisodeReference.asksForRole("What was the outcome?"))
+    }
+
     func test_normal_rechecks_indexed_text_and_rejects_deleted_episode() async throws {
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: tmp) }

@@ -40,6 +40,13 @@ public enum Prompts {
     Separate the proposal from the cited facts. Do not cite a suggestion as evidence, give blanks or a generic STAR template, or ask the user to repeat an episode already available. Ask at most one precise clarification if it would materially improve the answer. For a fully answerable general question, just answer it directly.
     """
 
+    static let personalRoleAnswer = """
+    The current question asks what the speaker personally did in this episode. Answer only that question, in the requested language.
+    If an authorized source explicitly attributes a task to the speaker, give exactly one short, first-person, past-tense sentence describing that task. Cite the excerpt if numbered, then stop. A statement by the user needs no attribution footer.
+    If the source establishes team tasks but leaves individual ownership open, use a brief attribution such as “The source describes a team effort [1].” Cite the episode here only. Then give one or two alternatives on separate lines. Each line must put its own condition BEFORE the spoken quote: If you handled [task]: “I [past-tense action].” Replace both brackets with actual tasks documented in the episode. Stay on the specific problem discussed in the immediately preceding question. Choose only documented tasks that address that problem, even if the excerpt lists other project activities. Prefer one relevant option over a second peripheral one. The condition and quote must refer to the same task. These are options for the user to select only if true.
+    Keep the opening under twelve words. Limit each quote to a single action in about twelve words. Use two distinct options only if both directly address the problem. Do not list tools or models, repeat the source, or attach a citation to a proposed individual role. Use only actions, tools and methods explicitly present in the authorized passage. Preserve their scope. Reuse the source's technical wording without adding plausible refinements, numbers, causes or implementation details. Avoid headings, missing-facts lists, a project recap, clarification questions and “I would” proposals. If even the team's tasks are unknown, ask which task the user handled.
+    """
+
     static func assistInstruction(_ question: AssistQuestion, technicalInterview: Bool = false) -> String {
         let context = question.context
         let mode: MeetingMode = technicalInterview ? .technical : question.mode
@@ -91,8 +98,15 @@ public enum Prompts {
         // A whole exchange can contain multiple question kinds. A lexical format selected from
         // its final fragments must not override the current-question hierarchy above.
         let format = question.liveSnapshot == nil ? question.format : nil
+        let manualAnswer = question.action == .answer && (question.typed || question.liveSnapshot != nil)
+        let currentQuestion = question.liveSnapshot?.focusText ?? question.question ?? ""
+        let hasEvidence = !context.includedExtracts.isEmpty || context.includedLines.contains { $0.speaker == .me } || !question.personalNotes.isEmpty
+        if manualAnswer && hasEvidence && EpisodeReference.asksForRole(currentQuestion) {
+            parts.append(personalRoleAnswer)
+            return parts.joined(separator: "\n\n")
+        }
         parts.append(format.flatMap { formatInstruction($0, action: question.action, hasExtracts: !context.includedExtracts.isEmpty, technicalInterview: technicalInterview) } ?? actionInstruction(question.action, mode: mode))
-        if question.action == .answer, question.typed || question.liveSnapshot != nil {
+        if manualAnswer {
             parts.append(possibleAnswer)
             parts.append("""
             Answer the current request in its own terms. Use a suggested format only when it fits the question.
