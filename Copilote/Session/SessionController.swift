@@ -400,8 +400,12 @@ final class SessionController: ObservableObject {
     }
 
     /// Switching cards restores its request immediately; it does not start another paid call.
-    func showCachedAnswer(for topic: Topic) -> Bool {
-        guard stack.isEmpty, let cached = requests.values.filter({ $0.topic == TopicVersion(topic) && $0.failure == nil && $0.profileScope == settings.interviewScope }).max(by: { $0.id < $1.id }) else { return false }
+    func showCachedAnswer(for topic: Topic, manualOnly: Bool = false, context: AssistContext? = nil) -> Bool {
+        guard stack.isEmpty, let cached = requests.values.filter({ $0.topic == TopicVersion(topic) && $0.failure == nil && $0.profileScope == settings.interviewScope && (!manualOnly || !$0.isAutomatic) }).max(by: { $0.id < $1.id }) else { return false }
+        if let context, case let .assist(q) = cached.input {
+            guard !q.context.includedLines.contains(where: { context.excludedLineTexts.contains($0.text) }),
+                  !q.context.includedExtracts.contains(where: { context.excludes(source: $0.source) }) else { return false }
+        }
         if shown !== cached { cancelCurrent() }
         keepsManualFocus = true
         navigationSerial += 1; navigationID = cached.id
@@ -504,7 +508,10 @@ final class SessionController: ObservableObject {
                   previous.failure == nil, !previous.text.isEmpty,
                   (notesByRequest[previous.id] ?? []).isSubset(of: allowedNotes) else { return nil }
             let refs: [BaseSnippet]
-            if case let .assist(q) = previous.input { refs = q.context.includedExtracts } else { refs = [] }
+            if case let .assist(q) = previous.input, case let .assist(current) = input {
+                guard q.context.includedLines.allSatisfy({ !current.context.excludedLineTexts.contains($0.text) }) else { return nil }
+                refs = q.context.includedExtracts
+            } else { refs = [] }
             return (questionText(previous), previous.text, refs)
         }
         let personalNotes = stickyNotes.includedContext

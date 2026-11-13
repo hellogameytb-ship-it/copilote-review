@@ -39,7 +39,7 @@ public struct AnswerPlan: Equatable, Sendable {
     public var isWorthDrafting: Bool { format.kind != .none }
 
     /// The last two turns heard tell the kind: a follow-up alone ("et pourquoi ?") says too little.
-    public static func make(heard: [String], base: PersonalBase?, conversation: [TranscriptLine] = [], interviewEvidence: InterviewEvidenceStore? = nil, episode: EpisodeReference? = nil, today: CalendarDay = .today()) async -> AnswerPlan {
+    public static func make(heard: [String], base: PersonalBase?, conversation: [TranscriptLine] = [], interviewEvidence: InterviewEvidenceStore? = nil, episode: EpisodeReference? = nil, technicalInterview: Bool = false, today: CalendarDay = .today()) async -> AnswerPlan {
         guard heard.contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
             return AnswerPlan(format: AnswerFormat(kind: .none), extracts: [])
         }
@@ -51,6 +51,15 @@ public struct AnswerPlan: Equatable, Sendable {
             let localRefs = episode.extracts.filter { $0.interviewRevision == nil }
             let local = localRefs.isEmpty ? [] : (try? await base?.search.revalidated(localRefs, lookup: episode.lookup)) ?? []
             return AnswerPlan(format: format, extracts: verified + local)
+        }
+        if technicalInterview || interviewEvidence != nil, let focus = InterviewFocus.resolve(heard: heard, conversation: conversation) {
+            let format = AnswerFormat(kind: .personal)
+            if let preferred = interviewEvidence?.snippets(for: focus), !preferred.isEmpty {
+                return AnswerPlan(format: format, extracts: preferred)
+            }
+            let local = try? await base?.search.interviewSnippet(for: focus)
+            return AnswerPlan(format: format, extracts: local.map { [$0] } ?? [])
+
         }
         var heard = heard
         let latest = heard.last?.lowercased() ?? ""

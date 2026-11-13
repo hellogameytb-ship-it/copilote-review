@@ -1,3 +1,13 @@
+# Build 28 — question scope and card navigation
+
+Answer resolves a short follow-up using recent speech and the current question. Source selection and answer instructions distinguish model evaluation, technical implementation, individual responsibility, verification practices and logistics. Closing remarks and explanations can suppress automatic requests. Explicit navigation to an older card keeps its own topic, and manual answers can be reused after checking the current context and exclusions.
+
+The signed candidate passed 383 framework tests, 1,262 native checks, 29 profile checks, 15 evidence checks and seven spoken-restatement checks. Validation compared 22 transcript windows per version and exercised 12 real provider responses on the exact candidate. Lexical rules and imperfect transcription can still misclassify questions. One real answer expressed a tentative status before offering to verify it. The replay exercises already-transcribed speech.
+
+At publication, local installation was pending because the running previous version had no observable listening state. Candidate signature and archive integrity were verified upstream. This export includes source and synthetic tests. Private replay inputs, outputs and local files are excluded. The public export has not been independently rebuilt.
+
+---
+
 # Build 27 — spoken question restatements
 
 Answer recognizes an explicit candidate restatement of an experience question in French or English. It can retrieve an authorized CV episode when the candidate is the only recorded speaker. A direct interviewer question takes priority. Ordinary candidate statements, third-party scenarios, negations and unconfirmed speech must not trigger private evidence retrieval. Existing source exclusions and the user’s base preference still apply.

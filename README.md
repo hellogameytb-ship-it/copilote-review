@@ -1,6 +1,6 @@
-# Build 27
+# Build 28
 
-Answer can recognize explicit spoken restatements of interview questions in French and English. See the agent handoff for the evidence-selection rules and validation limits.
+The reviewed candidate improves topic selection, manual card navigation and handling of uncertain facts. Local installation is pending. See the agent handoff for validation.
 
 # Copilote — source review snapshot
 

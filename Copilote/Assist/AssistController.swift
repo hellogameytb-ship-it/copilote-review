@@ -63,6 +63,11 @@ final class AssistController: ObservableObject {
 
     func observe(_ listening: ListeningController) {
         self.listening = listening
+        listening.automaticContext = { [weak self] in
+            guard let self else { return AssistContext() }
+            self.refresh()
+            return self.context
+        }
         session.onClearChat = { [weak self] in
             guard let self else { return }
             self.extractsTask?.cancel()
@@ -90,12 +95,13 @@ final class AssistController: ObservableObject {
     func answer(_ topic: Topic) {
         extractsTask?.cancel()
         target = topic
-        if session.showCachedAnswer(for: topic) {
+        refresh()
+        if session.showCachedAnswer(for: topic, manualOnly: settings.technicalInterviewActive, context: context) {
             overlay.reveal()
             return
         }
         session.prepareFreshAnswer()
-        loadExtracts { [weak self] in self?.runSelected(.answer) }
+        loadExtracts(manual: true) { [weak self] in self?.runSelected(.answer) }
     }
 
     /// Lines, captures and base extracts as of now; the user's switches are kept.
@@ -177,7 +183,7 @@ final class AssistController: ObservableObject {
         let episode = session.previousEpisode(for: text, context: context)
         extractsTask = Task {
             let topic = Topic(id: "typed", title: text, excerpt: [text], createdAt: Date(), updatedAt: Date())
-            let plan = await base.plan(for: topic, conversation: listening?.transcript.lines ?? [], manualInterview: true, episode: episode)
+            let plan = await base.plan(for: topic, conversation: context.includedLines, manualInterview: true, episode: episode)
             guard !Task.isCancelled, settings.interviewScope == scope, settings.baseFolder == sourceFolder, settings.baseMode == sourceMode else { return }
             extracts = plan.extracts
             format = plan.format
@@ -189,14 +195,23 @@ final class AssistController: ObservableObject {
     }
 
     /// A case: its plan (format and the extracts it may use). The last phrases: what the base has on them.
-    private func loadExtracts(then done: @escaping () -> Void) {
+    private func loadExtracts(manual: Bool = false, then done: @escaping () -> Void) {
         let target = target
-        let text = listening?.transcript.lines.suffix(3).map(\.text).joined(separator: "\n") ?? ""
+        refresh()
+        let text = context.includedLines.suffix(3).map(\.text).joined(separator: "\n")
         extractsTask?.cancel()
         extractsTask = Task {
             let plan: AnswerPlan
             if let target {
-                plan = await base.plan(for: target, conversation: listening?.transcript.lines ?? [])
+                refresh()
+                var selected = target
+                let excluded = context.excludedLineTexts
+                selected.excerpt = target.excerpt.filter { !excluded.contains($0) }
+                if selected.excerpt.isEmpty && !target.excerpt.isEmpty {
+                    plan = AnswerPlan(format: AnswerFormat(kind: .none), extracts: [])
+                } else {
+                    plan = await base.plan(for: selected, conversation: context.includedLines, manualInterview: manual)
+                }
             } else {
                 plan = AnswerPlan(format: AnswerFormat(kind: .none), extracts: text.isEmpty ? [] : await base.snippets(for: text))
             }

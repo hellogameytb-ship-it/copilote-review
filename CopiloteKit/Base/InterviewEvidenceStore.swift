@@ -119,6 +119,19 @@ public struct InterviewEvidenceStore: Sendable {
         return [snippet(for: best, in: rows)]
     }
 
+    /// Require evidence specific to the requested facet. A shared project tag or generic
+    /// “experience” match cannot establish an obstacle, ownership or a verification incident.
+    func snippets(for focus: InterviewFocus) -> [BaseSnippet] {
+        guard !focus.evidenceTerms.isEmpty else { return [] }
+        let rows = verifiedRows().filter(\.isCV)
+        let scored = rows.compactMap { row -> (Row, Int)? in
+            let score = focus.score(title: row.topic, passage: row.passage)
+            return score > 0 ? (row, score) : nil
+        }
+        guard let best = scored.sorted(by: { $0.1 == $1.1 ? $0.0.id < $1.0.id : $0.1 > $1.1 }).first else { return [] }
+        return [snippet(for: best.0, in: rows)]
+    }
+
     /// Match the exact previously shown evidence against today's database and original
     /// documents. A changed digest, passage, attribution or deleted row breaks the link.
     public func revalidated(_ references: [BaseSnippet]) -> [BaseSnippet] {

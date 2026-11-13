@@ -210,14 +210,15 @@ final class BaseController: ObservableObject {
     }
 
     func plan(for topic: Topic, conversation: [TranscriptLine] = [], manualInterview: Bool = false, episode: EpisodeReference? = nil) async -> AnswerPlan {
-        await AnswerPlan.make(heard: topic.excerpt.isEmpty ? [topic.title] : topic.excerpt, base: router.mode == .off ? nil : personal, conversation: conversation, interviewEvidence: manualInterview ? interviewEvidence : nil, episode: episode)
+        await AnswerPlan.make(heard: topic.excerpt.isEmpty ? [topic.title] : topic.excerpt, base: router.mode == .off ? nil : personal, conversation: conversation, interviewEvidence: manualInterview ? interviewEvidence : nil, episode: episode, technicalInterview: settings.technicalInterviewActive)
     }
 
     /// Freeze the selected base before asynchronous lookup starts.
     func snapshotPlan(heard: [String], conversation: [TranscriptLine], episode: EpisodeReference? = nil) -> @MainActor () async -> AnswerPlan {
         let selected = router.mode == .off ? nil : personal
         let evidence = interviewEvidence
-        return { await AnswerPlan.make(heard: heard, base: selected, conversation: conversation, interviewEvidence: evidence, episode: episode) }
+        let technical = settings.technicalInterviewActive
+        return { await AnswerPlan.make(heard: heard, base: selected, conversation: conversation, interviewEvidence: evidence, episode: episode, technicalInterview: technical) }
     }
 
     /// « Afficher » on a suggestion: the fiche opens, even over an answer being read.

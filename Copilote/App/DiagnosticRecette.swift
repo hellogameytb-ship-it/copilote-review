@@ -96,6 +96,12 @@ enum DiagnosticRecette {
             await pause()
             if DiagnosticAnchorFixture.isRequested && args.contains("-RecetteEvidenceOnly") {
                 realProviderUsed = args.contains("-RecetteCodex")
+                if args.contains("-RecetteInterviewReplay") {
+                    await DiagnosticInterviewReplay.run(folder: folder, settings: settings, session: session, overlay: overlay, providers: providers, listening: listening, fake: fake, live: realProviderUsed, record: record)
+                    defaults.removePersistentDomain(forName: suite)
+                    NSApp.terminate(nil)
+                    return
+                }
                 await DiagnosticPrivateEvidence.run(folder: folder, live: args.contains("-RecetteCodex"), settings: settings, session: session, overlay: overlay, providers: providers, listening: listening, fake: fake, record: record)
                 defaults.removePersistentDomain(forName: suite)
                 NSApp.terminate(nil)

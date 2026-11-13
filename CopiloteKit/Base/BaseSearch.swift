@@ -118,17 +118,52 @@ public actor BaseSearch {
         return BehavioralEpisode.best(for: intent, in: preparedEpisodes(), namedProjects: namedProjects)
     }
 
+    func interviewSnippet(for focus: InterviewFocus) throws -> BaseSnippet? {
+        if focus.subject == .graduation { return try graduationSnippet() }
+        guard !focus.evidenceTerms.isEmpty else { return nil }
+        try reloadIfNeeded()
+        let candidates = items.filter { $0.kind == .cv || $0.kind == .project }
+        var best: BaseSnippet?
+        var high = 0
+        for item in candidates.sorted(by: { $0.id < $1.id }) {
+            guard VaultPolicy.allows(path: item.source), !VaultPolicy.containsSecrets(item.text) else { continue }
+            for line in BaseContext.body(of: item).components(separatedBy: .newlines) where (18...400).contains(line.count) {
+                let score = focus.score(title: item.label, passage: line)
+                guard score > high, !line.hasPrefix(">"), !line.contains("- [ ]") else { continue }
+                high = score
+                best = BaseSnippet(source: "\(item.label) (\(item.source))", text: line)
+            }
+        }
+        return best
+    }
+
+    /// Extract the relevant line of the CV itself. A project note mentioning a year or
+    /// a checklist to edit a resume cannot establish the candidate's graduation month.
+    func graduationSnippet() throws -> BaseSnippet? {
+        try reloadIfNeeded()
+        let date = #"(?i)\b(?:jan\w*|feb\w*|mar\w*|apr\w*|may|jun\w*|jul\w*|aug\w*|sep\w*|oct\w*|nov\w*|dec\w*|juin|juil\w*|mai|avr\w*)[ .,/–-]+20\d{2}\b"#
+        for item in items.filter({ $0.kind == .cv }).sorted(by: { $0.id < $1.id }) where VaultPolicy.allows(path: item.source) {
+            for line in BaseContext.body(of: item).components(separatedBy: .newlines) {
+                let words = InterviewFocus.normalized(line)
+                guard line.count < 400, !VaultPolicy.containsSecrets(line), !line.hasPrefix(">"),
+                      ["expected graduation", "graduation date", "diplome prevu", "diplomation prevue"].contains(where: words.contains),
+                      line.range(of: date, options: .regularExpression) != nil else { continue }
+                return BaseSnippet(source: "\(item.label) (\(item.source))", text: line)
+            }
+        }
+        return nil
+    }
+
     /// Recheck the exact passage in the active index instead of ranking a different
     /// project for an elliptical role or outcome question.
     func revalidated(_ prior: [BaseSnippet], lookup: String) throws -> [BaseSnippet] {
         try reloadIfNeeded()
-        if QueryIntent(question: lookup).isBehavioral {
-            let episodes = preparedEpisodes()
-            return prior.filter { ref in episodes.contains { $0.source == ref.source && $0.passage == ref.text } }
-        }
+        let episodes = QueryIntent(question: lookup).isBehavioral ? preparedEpisodes() : []
         return prior.filter { ref in
-            items.contains { item in
-                "\(item.label) (\(item.source))" == ref.source && BaseContext.snippets(from: [item]).contains(ref)
+            if episodes.contains(where: { $0.source == ref.source && $0.passage == ref.text }) { return true }
+            return items.contains { item in
+                guard "\(item.label) (\(item.source))" == ref.source, VaultPolicy.allows(path: item.source), !VaultPolicy.containsSecrets(item.text) else { return false }
+                return BaseContext.snippets(from: [item]).contains(ref) || BaseContext.body(of: item).components(separatedBy: .newlines).contains(ref.text)
             }
         }
     }

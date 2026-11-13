@@ -13,6 +13,20 @@ public enum TurnCompletion {
             || ["est ce que", "i would like you to", "i need you to", "we need you to", "walk me through", "talk me through"].contains(where: joined.hasPrefix)
     }
 
+    public static func closesExchange(_ text: String) -> Bool {
+        InterviewFocus.isClosing(InterviewFocus.normalized(text))
+    }
+
+    /// ASR sometimes appends '?' to explanations. Suppress those only for automatic drafting.
+    public static func automaticRequest(_ text: String) -> Bool {
+        let s = InterviewFocus.normalized(text)
+        guard !InterviewFocus.isClosing(s), !LiveAnswerSnapshot.isSocial(text) else { return false }
+        if ["are you ready to proceed", "are you ready to start", "can you hear me", "how are you doing", "how are you today"].contains(where: s.hasSuffix) { return false }
+        if ["what i can tell you", "you d be working", "you be working", "you would be working", "the work spans",
+            "i don t have those", "thanks for", "how we work", "our team will", "your english is clear"].contains(where: s.hasPrefix) { return false }
+        return requestsAnswer(text)
+    }
+
     public static func isComplete(_ text: String) -> Bool {
         let words = BaseText.tokens(of: text)
         guard let last = words.last, words.count >= 2 else { return false }

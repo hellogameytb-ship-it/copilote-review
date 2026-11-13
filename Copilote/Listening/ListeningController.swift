@@ -77,6 +77,8 @@ final class ListeningController: ObservableObject {
     private let microphone = MicrophoneCapture()
     private var session: ListeningSession?
     /// Case 1's answer, drafted by itself (setting on).
+    private var lastAutomaticQuestion: (text: String, end: TimeInterval)?
+    var automaticContext: (() -> AssistContext)?
     private var autoAnswers = AutoAnswerPolicy()
     private var drafting: [String: Task<Void, Never>] = [:]
     private var preparationIDs: [String: UUID] = [:]
@@ -198,6 +200,7 @@ final class ListeningController: ObservableObject {
         topics = []
         transcript = TranscriptBuffer()
         volatile = [:]; volatileUpdatedAt = [:]
+        lastAutomaticQuestion = nil
         autoAnswers = AutoAnswerPolicy()
         drafting.values.forEach { $0.cancel() }; drafting = [:]; pendingAnswers = [:]; preparationIDs = [:]
         answers?.forgetTopics()
@@ -293,6 +296,7 @@ final class ListeningController: ObservableObject {
         contextBoundary = -.infinity; suppressInterim = []
         topics = []; transcript = TranscriptBuffer(); sessionLines = []; volatile = [:]; volatileUpdatedAt = [:]
         drafting.values.forEach { $0.cancel() }; drafting = [:]; pendingAnswers = [:]; preparationIDs = [:]
+        lastAutomaticQuestion = nil
         autoAnswers = AutoAnswerPolicy(); answers?.forgetTopics()
         gate.isPaused = false; isPaused = false; speaking = []
         startedAt = Self.uptime; startedDate = Date(); state = .listening
@@ -323,6 +327,7 @@ final class ListeningController: ObservableObject {
         }
         contextBoundary = -.infinity; suppressInterim = []
         topics = []; transcript = TranscriptBuffer(); sessionLines = []; volatile = [:]; volatileUpdatedAt = [:]
+        lastAutomaticQuestion = nil
         autoAnswers = AutoAnswerPolicy()
         gate.isPaused = false; isPaused = false
         startedAt = Self.uptime; startedDate = Date(); state = .listening
@@ -365,6 +370,7 @@ final class ListeningController: ObservableObject {
         contextBoundary = max(Self.uptime - startedAt, transcript.lines.map(\.end).max() ?? 0)
         suppressInterim = [.me, .them]
         drafting.values.forEach { $0.cancel() }; drafting = [:]; pendingAnswers = [:]; preparationIDs = [:]
+        lastAutomaticQuestion = nil
         autoAnswers = AutoAnswerPolicy()
         topics = []; transcript = TranscriptBuffer(); sessionLines = []
         volatile = [:]; volatileUpdatedAt = [:]
@@ -457,7 +463,7 @@ final class ListeningController: ObservableObject {
                     preparationIDs.removeValue(forKey: from)
                     pendingAnswers.removeValue(forKey: from)
                     answers?.follow(merged: from, into: target)
-                    if settings.autoAnswer, answers?.hasCachedRequest(for: target) == false { pendingAnswers[target.id] = target }
+                    if settings.autoAnswer, TurnCompletion.automaticRequest(target.excerpt.last ?? target.title), answers?.hasCachedRequest(for: target) == false { pendingAnswers[target.id] = target }
                     base.follow(target, from: from)
                 }
             case let .confirmed(id):
@@ -484,6 +490,22 @@ final class ListeningController: ObservableObject {
                 answers?.cancelAutomatic(for: id)
             }
         case let .start(topic):
+            let raw = update.turn?.text ?? topic.excerpt.last ?? topic.title
+            let text = BaseText.tokens(of: raw).joined(separator: " ")
+            guard TurnCompletion.automaticRequest(raw) else {
+                if TurnCompletion.closesExchange(raw) {
+                    drafting.values.forEach { $0.cancel() }; drafting.removeAll()
+                    pendingAnswers.removeAll(); preparationIDs.removeAll()
+                    answers?.cancelAutomatic()
+                    return
+                }
+                pendingAnswers.removeValue(forKey: topic.id)
+                drafting.removeValue(forKey: topic.id)?.cancel()
+                return
+            }
+            let end = update.turn?.end ?? Self.uptime
+            if let last = lastAutomaticQuestion, last.text == text, abs(end - last.end) <= 12 { return }
+            lastAutomaticQuestion = (text, end)
             // Only the newest automatic draft is useful; never fan out every pending subject.
             for task in drafting.values { task.cancel() }
             drafting.removeAll();preparationIDs.removeAll();pendingAnswers.removeAll()
@@ -501,7 +523,11 @@ final class ListeningController: ObservableObject {
             let preparation = UUID()
             preparationIDs[topic.id] = preparation
             drafting[topic.id] = Task { [weak self, base] in
-                let plan = await base.plan(for: topic, conversation: self?.transcript.lines ?? [])
+                let startContext = self?.automaticContext?() ?? AssistContext(lines: self?.transcript.lines ?? [])
+                let allowed = topic.excerpt.filter { !startContext.excludedLineTexts.contains($0) }
+                var selected = topic
+                selected.excerpt = allowed
+                let plan = await base.plan(for: selected, conversation: startContext.includedLines)
                 guard let self else { return }
                 defer {
                     if self.preparationIDs[topic.id] == preparation {
@@ -513,8 +539,13 @@ final class ListeningController: ObservableObject {
                       self.topics.contains(where: { $0.id == topic.id && $0.version == topic.version }) else { return }
                 guard !self.speaking.contains(.them) else { return }
                 self.pendingAnswers.removeValue(forKey: topic.id)
-                guard plan.isWorthDrafting, TurnCompletion.requestsAnswer(topic.excerpt.last ?? topic.title) else { return }
-                let question = AssistQuestion.draft(for: topic, plan: plan, lines: self.transcript.lines, mode: answers.mode ?? self.settings.mode)
+                guard plan.isWorthDrafting, TurnCompletion.automaticRequest(topic.excerpt.last ?? topic.title) else { return }
+                var current = self.automaticContext?() ?? AssistContext(lines: self.transcript.lines)
+                guard !topic.excerpt.contains(where: current.excludedLineTexts.contains),
+                      startContext.includedLines.allSatisfy({ !current.excludedLineTexts.contains($0.text) }) else { return }
+                current.replaceExtracts(with: plan.extracts)
+                let filtered = AnswerPlan(format: plan.format, extracts: current.includedExtracts)
+                let question = AssistQuestion.draft(for: topic, plan: filtered, lines: current.includedLines, mode: answers.mode ?? self.settings.mode)
                 answers.answerAutomatically(question, label: Copy.Direct.label(topic.title), topic: topic)
                 self.onAutomaticAnswer?(topic)
             }

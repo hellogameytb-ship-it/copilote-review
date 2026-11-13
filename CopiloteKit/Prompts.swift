@@ -112,6 +112,24 @@ public enum Prompts {
             parts.append(personalRoleAnswer)
             return parts.joined(separator: "\n\n")
         }
+        if technicalInterview, question.action == .answer {
+            let turns = question.liveSnapshot.map { [$0.lookupText] } ?? (question.typed || question.heard.isEmpty ? [question.question ?? ""] : question.heard)
+            if let focus = InterviewFocus.resolve(heard: turns, conversation: context.includedLines) {
+                parts.append("Answer this current interview point in one short spoken paragraph: " + focus.question)
+                parts.append(focus.guidance)
+                if context.includedExtracts.contains(where: { $0.source.contains("team project (individual role only if documented)") }) {
+                    parts.append("For this documented team project, use WE or OUR TEAM as the subject of every project action and result. Do not say I handled, I applied, I improved or my result, including in the opening sentence. An interviewer saying you does not establish individual ownership.")
+                }
+                if focus.subject == .obstacle {
+                    parts.append("When the hardest obstacle is unconfirmed, lead with that uncertainty. Limit the rest to at most one brief team or project fact, with no personal ownership inferred from the architecture.")
+                }
+                if focus.subject == .placement {
+                    parts.append("A tentative self-correction overrides the earlier classification. If present, respond with ONE sentence containing only that the speaker must verify the classification with their academic program. No statement about which classification seems likely.")
+                }
+                parts.append("Use only the supplied evidence and the candidate’s own clear statements. A duplicate of the interviewer's speech on the Me channel is not personal confirmation. Treat the latest uncertainty as a qualification. Cite document facts [n], never cite dialogue as if it were a document. Do not announce what the sources say or add an unnecessary follow-up.")
+                return parts.joined(separator: "\n\n")
+            }
+        }
         parts.append(format.flatMap { formatInstruction($0, action: question.action, hasExtracts: !context.includedExtracts.isEmpty, technicalInterview: technicalInterview) } ?? actionInstruction(question.action, mode: mode))
         if manualAnswer {
             parts.append(possibleAnswer)
